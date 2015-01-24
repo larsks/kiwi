@@ -39,14 +39,31 @@ class IPManager (object):
     def add_ip_address(self, ip):
         self.log.info('adding address %s to interface %s',
                       ip, self.interface)
-        subprocess.check_call(['ip', 'addr', 'add',
-                               '%s/32' % ip, 'dev', self.interface])
+        p = subprocess.Popen(['ip', 'addr', 'add',
+                               '%s/32' % ip, 'dev', self.interface],
+                              stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE)
+        out, err = p.communicate()
+
+        if p.returncode != 0:
+            self.log.warn('failed to add address %s to interface %s '
+                          '(returncode=%d): %s',
+                          ip, self.interface, p.returncode, err)
 
     def remove_ip_address(self, ip):
         self.log.info('removing address %s from interface %s',
                       ip, self.interface)
-        subprocess.check_call(['ip', 'addr', 'del',
-                               '%s/32' % ip, 'dev', self.interface])
+        p = subprocess.Popen(['ip', 'addr', 'del',
+                               '%s/32' % ip, 'dev', self.interface],
+                              stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE)
+        out, err = p.communicate()
+
+        if p.returncode != 0:
+            self.log.warn('failed to remove address %s from interface %s '
+                          '(returncode=%d): %s',
+                          ip, self.interface, p.returncode, err)
+
 
     def remove_all(self):
         for ip in self.pips.keys():

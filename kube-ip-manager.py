@@ -1,5 +1,8 @@
 #!/usr/bin/python
 
+'''Manages the assigned of public ips to interfaces and the associated
+firewall rules for Kubernetes services.'''
+
 # {
 #     "object": {
 #         "apiVersion": "v1beta1",
@@ -80,6 +83,9 @@ class IPManager (object):
         self.init_firewall()
 
     def init_firewall(self):
+        '''Make sure the firewall chain we will be managing both exists and
+        is empty.'''
+
         try:
             run('iptables', '-t', 'mangle', '-S',
                 self.fwchain)
@@ -169,6 +175,12 @@ class IPManager (object):
             self.remove_fw_rule(service, ip)
 
     def add_ip_address(self, ip):
+        '''Adds an ip address to a network interface. These
+        addresses are labelled with the `:kube` suffix so that they can
+        easily be identified:
+
+        ip addr show label *:kube'''
+
         self.log.info('adding address %s to interface %s',
                       ip, self.interface)
         try:
@@ -181,6 +193,7 @@ class IPManager (object):
                 raise
 
     def remove_ip_address(self, ip):
+        '''Remove an address from a network interface.'''
         self.log.info('removing address %s from interface %s',
                       ip, self.interface)
         try:
@@ -191,6 +204,8 @@ class IPManager (object):
                 raise
 
     def remove_all(self):
+        '''Removes all services that we are managing (meant to be called on
+        program exit)'''
         for service in self.services.values():
             self.remove_service(service)
 

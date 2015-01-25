@@ -1,5 +1,30 @@
 #!/usr/bin/python
 
+# {
+#     "object": {
+#         "apiVersion": "v1beta1",
+#         "containerPort": 9090,
+#         "creationTimestamp": "2015-01-23T16:45:38-05:00",
+#         "id": "squeezebox-cli",
+#         "kind": "Service",
+#         "namespace": "default",
+#         "port": 9090,
+#         "portalIP": "10.254.28.96",
+#         "protocol": "TCP",
+#         "publicIPs": [
+#             "192.168.1.40"
+#         ],
+#         "resourceVersion": 119,
+#         "selector": {
+#             "name": "squeezebox"
+#         },
+#         "selfLink": "/api/v1beta1/services/squeezebox-cli",
+#         "uid": "2b328eb1-a349-11e4-8c74-20cf30467e62"
+#     },
+#     "type": "ADDED"
+# }
+
+
 import os
 import sys
 import argparse
@@ -10,66 +35,158 @@ import time
 
 from contextlib import closing
 
+class CalledProcessError(Exception):
+    def __init__(self, cmd=None, returncode=None,
+                 stdout=None, stderr=None):
+        self.cmd = cmd
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
+
+        super(CalledProcessError, self).__init__(
+            '%s failed with error: %s' % (cmd[0], stderr))
+
+def run(*cmd):
+    '''Run a command.  Raises CalledProcessError if the command exits
+    with returncode != 0.  The CalledProcessError object will have the
+    returncode, stdout, and stderr from the command.'''
+
+    p = subprocess.Popen(cmd,
+                         stdout=subprocess.PIPE,
+                         stderr=subprocess.PIPE)
+    out, err = p.communicate()
+
+    if p.returncode != 0:
+        raise CalledProcessError(cmd=cmd,
+                                 returncode=p.returncode,
+                                 stdout=out,
+                                 stderr=err)
+
 class IPManager (object):
     log = logging.getLogger('ipmanager')
 
-    def __init__(self, interface):
+    def __init__(self, interface='eth0', fwchain='KUBE-PUBLIC'):
         self.interface = interface
-        self.pips = {}
+        self.fwchain = fwchain
+
+        self.services = {}
+        self.fwrules = {}
+        self.addresses = {}
+
+        self.init_firewall()
+
+    def init_firewall(self):
+        try:
+            run('iptables', '-t', 'mangle', '-S',
+                self.fwchain)
+        except CalledProcessError as err:
+            if 'No chain/target/match by that name.' not in err.stderr:
+                raise
+
+            run('iptables', '-t', 'mangle',
+                '-N', 'KUBE-PUBLIC')
+        else:
+            run('iptables', '-t', 'mangle', '-F',
+                self.fwchain)
 
     def add_service(self, service):
-        for ip in service.get('publicIPs', []):
-            self.log.info('add service %s at %s',
-                          service['id'], ip)
-            if ip not in self.pips:
-                self.pips[ip] = 1
-                self.add_ip_address(ip)
+        if 'publicIPs' not in service:
+            self.log.warn('ignoring add for service %s with no public ips',
+                          service['id'])
+            return
+
+        if service['id'] in self.services:
+            self.log.warn('ignoring add for existing service %s',
+                          service['id'])
+            return
+
+        self.log.info('adding service %s on port %s',
+                      service['id'],
+                      service['port'])
+
+        self.services[service['id']] = service
+
+        for ip in service['publicIPs']:
+            if ip in self.addresses:
+                self.addresses[ip] += 1
             else:
-                self.pips[ip] += 1
+                self.addresses[ip] = 1
+                self.add_ip_address(ip)
+
+            self.add_fw_rule(service, ip)
+
+    def add_fw_rule(self, service, ip):
+        fwrule = ('-d', ip,
+                  '-p', service['protocol'].lower(),
+                  '--dport', '%s' % service['port'],
+                  '-j', 'MARK',
+                  '--set-mark', '1',
+                  '-m', 'comment',
+                  '--comment', service['id'])
+
+        self.fwrules[service['id']] = fwrule
+
+        self.log.info('adding fw rule: %s',
+                      ' '.join(fwrule))
+        run('iptables', '-t', 'mangle',
+            '-A', self.fwchain, *fwrule)
+
+    def remove_fw_rule(self, service, ip):
+        fwrule = self.fwrules[service['id']]
+        self.log.info('removing fw rule: %s',
+                      ' '.join(fwrule))
+        run('iptables', '-t', 'mangle',
+            '-D', self.fwchain, *fwrule)
 
     def remove_service(self, service):
-        for ip in service.get('publicIPs', []):
-            self.log.info('remove service %s at %s',
-                          service['id'], ip)
-            self.pips[ip] -= 1
-            if self.pips[ip] == 0:
-                del self.pips[ip]
-                self.remove_ip_address(ip)
+        if 'publicIPs' not in service:
+            self.log.warn('ignoring remove for service %s with no public ips',
+                          service['id'])
+            return
+
+        if service['id'] not in self.services:
+            self.log.warn('ignoring remove for unknown service %s',
+                          service['id'])
+            return
+
+        self.log.info('removing service %s on port %s',
+                      service['id'],
+                      service['port'])
+
+        del self.services[service['id']]
+
+        for ip in service['publicIPs']:
+            if ip in self.addresses:
+                self.addresses[ip] -= 1
+                if self.addresses[ip] == 0:
+                    self.remove_ip_address(ip)
+                    del self.addresses[ip]
+
+            self.remove_fw_rule(service, ip)
     
     def add_ip_address(self, ip):
         self.log.info('adding address %s to interface %s',
                       ip, self.interface)
-        p = subprocess.Popen(['ip', 'addr', 'add',
-                               '%s/32' % ip, 'dev', self.interface],
-                              stdout=subprocess.PIPE,
-                              stderr=subprocess.PIPE)
-        out, err = p.communicate()
-
-        if p.returncode != 0:
-            self.log.warn('failed to add address %s to interface %s '
-                          '(returncode=%d): %s',
-                          ip, self.interface, p.returncode, err)
+        try:
+            run('ip', 'addr', 'add',
+                '%s/32' % ip, 'dev', self.interface)
+        except CalledProcessError as err:
+            if 'File exists' not in err.stderr:
+                raise
 
     def remove_ip_address(self, ip):
         self.log.info('removing address %s from interface %s',
                       ip, self.interface)
-        p = subprocess.Popen(['ip', 'addr', 'del',
-                               '%s/32' % ip, 'dev', self.interface],
-                              stdout=subprocess.PIPE,
-                              stderr=subprocess.PIPE)
-        out, err = p.communicate()
-
-        if p.returncode != 0:
-            self.log.warn('failed to remove address %s from interface %s '
-                          '(returncode=%d): %s',
-                          ip, self.interface, p.returncode, err)
-
+        try:
+            run('ip', 'addr', 'del',
+                '%s/32' % ip, 'dev', self.interface)
+        except CalledProcessError as err:
+            if 'Cannot assign requested address' not in err.stderr:
+                raise
 
     def remove_all(self):
-        for ip in self.pips.keys():
-            self.remove_ip_address(ip)
-
-        self.pips = {}
+        for service in self.services.values():
+            self.remove_service(service)
 
 def parse_args():
     p = argparse.ArgumentParser()
@@ -82,13 +199,17 @@ def parse_args():
     p.add_argument('--interface', '-i',
                    default='eth0',
                    help='Attach public ips to this interface')
+    p.add_argument('--firewall-chain', '-f',
+                   default='KUBE-PUBLIC',
+                   help='Chain to manage in iptables mangle table')
     return p.parse_args()
 
 def main():
     args = parse_args()
     logging.basicConfig(level=logging.INFO)
 
-    mgr = IPManager(args.interface)
+    mgr = IPManager(interface=args.interface,
+                    fwchain=args.firewall_chain)
     api = '%s/api/%s' % (args.server, args.api_version)
 
     try:

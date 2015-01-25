@@ -33,7 +33,6 @@ import subprocess
 import logging
 import time
 
-from contextlib import closing
 
 class CalledProcessError(Exception):
     def __init__(self, cmd=None, returncode=None,
@@ -45,6 +44,7 @@ class CalledProcessError(Exception):
 
         super(CalledProcessError, self).__init__(
             '%s failed with error: %s' % (cmd[0], stderr))
+
 
 def run(*cmd):
     '''Run a command.  Raises CalledProcessError if the command exits
@@ -62,7 +62,11 @@ def run(*cmd):
                                  stdout=out,
                                  stderr=err)
 
+
 class IPManager (object):
+    '''A class for managing ip address assignment and firewall rules for
+    Kubernetes services with publicIPs.'''
+
     log = logging.getLogger('ipmanager')
 
     def __init__(self, interface='eth0', fwchain='KUBE-PUBLIC'):
@@ -163,13 +167,15 @@ class IPManager (object):
                     del self.addresses[ip]
 
             self.remove_fw_rule(service, ip)
-    
+
     def add_ip_address(self, ip):
         self.log.info('adding address %s to interface %s',
                       ip, self.interface)
         try:
             run('ip', 'addr', 'add',
-                '%s/32' % ip, 'dev', self.interface)
+                '%s/32' % ip,
+                'dev', self.interface,
+                'label', '%s:kube' % self.interface)
         except CalledProcessError as err:
             if 'File exists' not in err.stderr:
                 raise
@@ -188,6 +194,7 @@ class IPManager (object):
         for service in self.services.values():
             self.remove_service(service)
 
+
 def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument('--api-version', '-v',
@@ -204,6 +211,7 @@ def parse_args():
                    help='Chain to manage in iptables mangle table')
     return p.parse_args()
 
+
 def main():
     args = parse_args()
     logging.basicConfig(level=logging.INFO)
@@ -217,7 +225,7 @@ def main():
             # I'm using 'curl' here rather than requests with stream=true
             # because requests seemed to have a buffering issue that was
             # making it run behind by one event.
-            p = subprocess.Popen(['curl', '-sfN', 
+            p = subprocess.Popen(['curl', '-sfN',
                                   '%s/watch/services' % api],
                                  stdout=subprocess.PIPE,
                                  bufsize=1)

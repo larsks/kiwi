@@ -12,6 +12,9 @@ contain a `publicIPs` element the service will:
   already been assigned,
 - Create `mangle` table rules to mark inbound traffic
 
+**NB** In it's current form this service is only useful for a
+single-node deployment of Kubernetes.
+
 ## Example
 
 Assume that you have a Kubernetes service definition like this:

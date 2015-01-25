@@ -72,7 +72,10 @@ class IPManager (object):
 
     log = logging.getLogger('ipmanager')
 
-    def __init__(self, interface='eth0', fwchain='KUBE-PUBLIC'):
+    def __init__(self,
+                 interface='eth0',
+                 fwchain='KUBE-PUBLIC',
+                 fwmark='1'):
         self.interface = interface
         self.fwchain = fwchain
 
@@ -130,7 +133,7 @@ class IPManager (object):
                   '-p', service['protocol'].lower(),
                   '--dport', '%s' % service['port'],
                   '-j', 'MARK',
-                  '--set-mark', '1',
+                  '--set-mark', self.fwmark,
                   '-m', 'comment',
                   '--comment', service['id'])
 
@@ -224,6 +227,9 @@ def parse_args():
     p.add_argument('--firewall-chain', '-f',
                    default='KUBE-PUBLIC',
                    help='Chain to manage in iptables mangle table')
+    p.add_argument('--firewall-mark', '-m',
+                   default='1',
+                   help='fwmark applied in generated rules')
     return p.parse_args()
 
 
@@ -232,7 +238,8 @@ def main():
     logging.basicConfig(level=logging.INFO)
 
     mgr = IPManager(interface=args.interface,
-                    fwchain=args.firewall_chain)
+                    fwchain=args.firewall_chain,
+                    fwmark=args.firewall_mark)
     api = '%s/api/%s' % (args.server, args.api_version)
 
     try:

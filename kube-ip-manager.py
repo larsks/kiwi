@@ -28,14 +28,15 @@ firewall rules for Kubernetes services.'''
 # }
 
 
-import os
-import sys
 import argparse
 import json
-import subprocess
 import logging
-import time
+import netaddr
+import os
 import pycurl
+import subprocess
+import sys
+import time
 
 
 class CalledProcessError(Exception):
@@ -81,10 +82,12 @@ class IPManager (object):
     def __init__(self,
                  interface='eth0',
                  fwchain='KUBE-PUBLIC',
-                 fwmark='1'):
+                 fwmark='1',
+                 cidrs=None):
         self.interface = interface
         self.fwchain = fwchain
         self.fwmark = fwmark
+        self.cidrs = cidrs
 
         self.services = {}
         self.fwrules = {}
@@ -109,6 +112,17 @@ class IPManager (object):
             run('iptables', '-t', 'mangle', '-F',
                 self.fwchain)
 
+    def should_handle_address(self, ip):
+        if self.cidrs is None:
+            return True
+
+        for cidr in self.cidrs:
+            cidr = netaddr.IPNetwork(cidr)
+            if ip in cidr:
+                return True
+
+        return False
+
     def add_service(self, service):
         if 'publicIPs' not in service:
             self.log.warn('ignoring add for service %s with no public ips',
@@ -127,6 +141,10 @@ class IPManager (object):
         self.services[service['id']] = service
 
         for ip in service['publicIPs']:
+            if not self.should_handle_address(ip):
+                self.log.warn('ignoring invalid address: %s', ip)
+                continue
+
             if ip in self.addresses:
                 self.addresses[ip] += 1
             else:
@@ -237,6 +255,9 @@ def parse_args():
     p.add_argument('--firewall-mark', '-m',
                    default='1',
                    help='fwmark applied in generated rules')
+    p.add_argument('--public-ip-range', '-r',
+                   action='append',
+                   help='Only manage ips that fall within these ranges')
     p.add_argument('--dry-run', '-n',
                    action='store_true')
     p.add_argument('--debug',
@@ -272,7 +293,8 @@ def main():
 
     mgr = IPManager(interface=args.interface,
                     fwchain=args.firewall_chain,
-                    fwmark=args.firewall_mark)
+                    fwmark=args.firewall_mark,
+                    cidrs=args.public_ip_range)
     api = '%s/api/%s' % (args.server, args.api_version)
 
     try:

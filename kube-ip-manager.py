@@ -35,6 +35,7 @@ import json
 import subprocess
 import logging
 import time
+import pycurl
 
 
 class CalledProcessError(Exception):
@@ -234,7 +235,25 @@ def parse_args():
     return p.parse_args()
 
 
+def receive_event(data):
+    event = json.loads(data)
+    if event['object']['kind'] != 'Service':
+        return
+
+    service = event['object']
+
+    if event['type'] == 'ADDED':
+        mgr.add_service(service)
+    elif event['type'] == 'MODIFIED':
+        mgr.remove_service(service)
+        mgr.add_service(service)
+    else:
+        mgr.remove_service(service)
+
 def main():
+    global mgr
+    global args
+
     args = parse_args()
     logging.basicConfig(level=logging.INFO)
 
@@ -245,27 +264,11 @@ def main():
 
     try:
         while True:
-            # I'm using 'curl' here rather than requests with stream=true
-            # because requests seemed to have a buffering issue that was
-            # making it run behind by one event.
-            p = subprocess.Popen(['curl', '-sfN',
-                                  '%s/watch/services' % api],
-                                 stdout=subprocess.PIPE,
-                                 bufsize=1)
+            conn = pycurl.Curl()
+            conn.setopt(pycurl.URL, '%s/watch/services' % api)
+            conn.setopt(pycurl.WRITEFUNCTION, receive_event)
+            conn.perform()
 
-            for line in iter(p.stdout.readline, b''):
-                event = json.loads(line)
-                if event['object']['kind'] != 'Service':
-                    continue
-
-                service = event['object']
-
-                if event['type'] == 'ADDED':
-                    mgr.add_service(service)
-                else:
-                    mgr.remove_service(service)
-
-            out, err = p.communicate()
             logging.warn('curl failed (returncode=%d); sleeping before retry',
                          p.returncode)
             time.sleep(5)

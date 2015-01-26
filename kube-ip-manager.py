@@ -55,6 +55,11 @@ def run(*cmd):
     with returncode != 0.  The CalledProcessError object will have the
     returncode, stdout, and stderr from the command.'''
 
+    logging.debug('running: %s', ' '.join(cmd))
+
+    if args.dry_run:
+        return
+
     p = subprocess.Popen(cmd,
                          stdout=subprocess.PIPE,
                          stderr=subprocess.PIPE)
@@ -232,6 +237,14 @@ def parse_args():
     p.add_argument('--firewall-mark', '-m',
                    default='1',
                    help='fwmark applied in generated rules')
+    p.add_argument('--dry-run', '-n',
+                   action='store_true')
+    p.add_argument('--debug',
+                   action='store_const',
+                   dest='level',
+                   const=logging.DEBUG)
+
+    p.set_defaults(level=logging.INFO)
     return p.parse_args()
 
 
@@ -255,7 +268,7 @@ def main():
     global args
 
     args = parse_args()
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=args.level)
 
     mgr = IPManager(interface=args.interface,
                     fwchain=args.firewall_chain,

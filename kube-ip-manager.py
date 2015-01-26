@@ -78,6 +78,7 @@ class IPManager (object):
                  fwmark='1'):
         self.interface = interface
         self.fwchain = fwchain
+        self.fwmark = fwmark
 
         self.services = {}
         self.fwrules = {}

@@ -306,8 +306,12 @@ def main():
             conn = pycurl.Curl()
             conn.setopt(pycurl.URL, '%s/watch/services' % api)
             conn.setopt(pycurl.WRITEFUNCTION, receive_event)
-            conn.perform()
-            status = conn.getinfo(pycurl.HTTP_CODE)
+
+            try:
+                conn.perform()
+                status = conn.getinfo(pycurl.HTTP_CODE)
+            except pycurl.error as exc:
+                status = -1
 
             logging.warn('request ended (status=%d); sleeping before reconnect',
                          status)

@@ -40,7 +40,7 @@ class ServiceWatcher (Process):
                         self.log.warn('unknown event: %(type)s' % event)
                         continue
 
-                    handler(event)
+                    handler(event['object'])
             else:
                 self.log.error('request failed (%d): %s',
                                r.status_code,

@@ -3,6 +3,19 @@
 '''Manages the assigned of public ips to interfaces and the associated
 firewall rules for Kubernetes services.'''
 
+import argparse
+import json
+import logging
+import netaddr
+import os
+import requests
+import select
+import subprocess
+import sys
+import time
+
+from itertools import izip
+
 # {
 #     "object": {
 #         "apiVersion": "v1beta1",
@@ -26,17 +39,6 @@ firewall rules for Kubernetes services.'''
 #     },
 #     "type": "ADDED"
 # }
-
-
-import argparse
-import json
-import logging
-import netaddr
-import os
-import pycurl
-import subprocess
-import sys
-import time
 
 
 class CalledProcessError(Exception):
@@ -113,6 +115,9 @@ class IPManager (object):
                 self.fwchain)
 
     def should_handle_address(self, ip):
+        '''Check if the given address is contained by any of the address
+        ranges we manage.'''
+
         if self.cidrs is None:
             return True
 
@@ -269,12 +274,6 @@ def parse_args():
     return p.parse_args()
 
 
-# XXX: I think technically we're violating the curl api here, which says,
-# "The callback function will be passed as much data as possible in all
-# invokes, but you must not make any assumptions. It may be one byte, it
-# may be thousands."  In this code, we're assuming that this function gets
-# called once/line of data received from the server, which seems to work in
-# practice.
 def receive_event(data):
 
     try:
@@ -296,6 +295,39 @@ def receive_event(data):
     else:
         mgr.remove_service(service)
 
+
+def iter_lines(fd, chunk_size=1024):
+    '''Iterates over the content of a file-like object line-by-line.
+    
+    This replaces the broken iter_lines function in the requests library.'''
+
+    poll = select.poll()
+    poll.register(fd, select.POLLIN)
+    pending = None
+    eof = False
+
+    while not eof:
+        for fd,event in poll.poll():
+            chunk = os.read(fd, chunk_size)
+            if not chunk:
+                eof = True
+                break
+
+            if pending is not None:
+                chunk = pending + chunk
+                pending = None
+
+            lines = chunk.splitlines()
+
+            if lines and lines[-1]:
+                pending = lines.pop()
+
+            for line in lines:
+                yield line
+
+    if pending:
+        yield(pending)
+
 def main():
     global mgr
     global args
@@ -311,19 +343,20 @@ def main():
 
     try:
         while True:
-            conn = pycurl.Curl()
-            conn.setopt(pycurl.URL, '%s/watch/services' % api)
-            conn.setopt(pycurl.WRITEFUNCTION, receive_event)
-            conn.setopt(pycurl.FOLLOWLOCATION, 1)
+            r = requests.get('%s/watch/services' % api,
+                             stream=True)
 
-            try:
-                conn.perform()
-                status = conn.getinfo(pycurl.HTTP_CODE)
-            except pycurl.error as exc:
-                status = -1
+            if r.ok:
+                lines = iter_lines(r.raw)
+                for datalen, data, marker in izip(lines, lines, lines):
+                    receive_event(data)
+            else:
+                logging.warn('request failed (%d): %s',
+                             r.status_code,
+                             r.reason)
 
-            logging.warn('request ended (status=%d); sleeping before reconnect',
-                         status)
+
+            logging.warn('reconnecting to server')
             time.sleep(5)
     finally:
         mgr.remove_all()

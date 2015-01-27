@@ -270,7 +270,11 @@ def parse_args():
 
 
 def receive_event(data):
-    event = json.loads(data)
+    try:
+        event = json.loads(data)
+    except ValueError:
+        logging.error('failed to decode: %s', data)
+
     if event['object']['kind'] != 'Service':
         return
 

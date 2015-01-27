@@ -9,7 +9,6 @@ import logging
 import netaddr
 import os
 import requests
-import select
 import subprocess
 import sys
 import time
@@ -297,36 +296,30 @@ def receive_event(data):
 
 
 def iter_lines(fd, chunk_size=1024):
-    '''Iterates over the content of a file-like object line-by-line.
-    
-    This replaces the broken iter_lines function in the requests library.'''
+    '''Iterates over the content of a file-like object line-by-line.'''
 
-    poll = select.poll()
-    poll.register(fd, select.POLLIN)
     pending = None
-    eof = False
 
-    while not eof:
-        for fd,event in poll.poll():
-            chunk = os.read(fd, chunk_size)
-            if not chunk:
-                eof = True
-                break
+    while True:
+        chunk = os.read(fd.fileno(), chunk_size)
+        if not chunk:
+            break
 
-            if pending is not None:
-                chunk = pending + chunk
-                pending = None
+        if pending is not None:
+            chunk = pending + chunk
+            pending = None
 
-            lines = chunk.splitlines()
+        lines = chunk.splitlines()
 
-            if lines and lines[-1]:
-                pending = lines.pop()
+        if lines and lines[-1]:
+            pending = lines.pop()
 
-            for line in lines:
-                yield line
+        for line in lines:
+            yield line
 
     if pending:
         yield(pending)
+
 
 def main():
     global mgr

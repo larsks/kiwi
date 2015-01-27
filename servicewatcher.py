@@ -14,10 +14,12 @@ class ServiceWatcher (Process):
     log = logging.getLogger('kiwi.servicewatcher')
 
     def __init__(self,
+                 queue,
                  reconnect_interval=5,
                  kube_endpoint=default_kube_endpoint):
         super(ServiceWatcher, self).__init__()
 
+        self.q = queue
         self.kube_api = '%s/api/v1beta1' % kube_endpoint
         self.reconnect_interval = reconnect_interval
 
@@ -49,15 +51,30 @@ class ServiceWatcher (Process):
             self.log.warn('reconnecting to server')
             time.sleep(self.reconnect_interval)
 
-    def handle_added(self, event):
-        self.log.info('added: %s', event)
+    def handle_added(self, service):
+        self.log.info('added: %s', service)
+        self.q.put({'message': 'add-service',
+                    'data': {'service': service}})
 
-    def handle_deleted(self, event):
-        self.log.info('deleted: %s', event)
+    def handle_deleted(self, service):
+        self.log.info('deleted: %s', service)
+        self.q.put({'message': 'delete-service',
+                    'data': {'service': service}})
 
-    def handle_modified(self, event):
-        self.log.info('modified: %s', event)
+    def handle_modified(self, service):
+        self.log.info('modified: %s', service)
+        self.q.put({'message': 'update-service',
+                    'data': {'service': service}})
 
-logging.basicConfig(level=logging.DEBUG)
-s = ServiceWatcher()
-s.run()
+
+if __name__ == '__main__':
+    import multiprocessing
+    logging.basicConfig(level=logging.DEBUG)
+
+    q = multiprocessing.Queue()
+    s = ServiceWatcher(q)
+    s.start()
+
+    while True:
+        msg = q.get()
+        print 'msg:', msg

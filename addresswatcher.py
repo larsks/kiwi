@@ -14,10 +14,12 @@ class AddressWatcher (Process):
     log = logging.getLogger('kiwi.addresswatcher')
 
     def __init__(self,
+                 queue,
                  etcd_endpoint=default_etcd_endpoint,
                  etcd_prefix=default_etcd_prefix):
         super(AddressWatcher, self).__init__()
 
+        self.q = queue
         self.etcd_api = '%s/v2' % etcd_endpoint
         self.etcd_prefix = etcd_prefix
 
@@ -53,18 +55,26 @@ class AddressWatcher (Process):
             return
 
         self.log.info('create: %s %s', dir, address)
+        self.q.put({'message': 'add-address',
+                    'data': {'address': address}})
+
     def handle_delete(self, relkey, node):
+
         try:
             dir, address, name = relkey.split('/')
+            self.log.info('delete lock: %s %s %s', dir, address, name)
+            self.q.put({'message': 'release-lock',
+                        'data': {'address': address}})
         except ValueError:
             try:
                 dir, address = relkey.split('/')
-                name = '-'
+                self.log.info('delete address: %s %s', dir, address)
+                self.q.put({'message': 'delete-address',
+                            'data': {'address': address}})
             except ValueError:
                 self.log.error('invalid delete operation on: %s', relkey)
                 return
 
-        self.log.info('delete: %s %s %s', dir, address, name)
     def handle_set(self, relkey, node):
         try:
             dir, address, name = relkey.split('/')
@@ -72,10 +82,26 @@ class AddressWatcher (Process):
             self.log.error('invalid set operation on: %s', relkey)
             return
 
+        owner = node['value']
+
         self.log.info('set: %s %s %s', dir, address, name)
+        self.q.put({'message': 'acquire-lock',
+                    'data': {'address': address,
+                             'owner': owner}})
+
     def handle_expire(self, relkey, node):
         self.log.info('expire: %s %s', relkey, node)
+        self.handle_delete(relkey, node)
 
-logging.basicConfig(level=logging.DEBUG)
-s = AddressWatcher()
-s.run()
+if __name__ == '__main__':
+    import multiprocessing
+    logging.basicConfig(level=logging.DEBUG)
+
+    q = multiprocessing.Queue()
+    s = AddressWatcher(q)
+    s.start()
+
+    while True:
+        msg = q.get()
+        print 'msg:', msg
+

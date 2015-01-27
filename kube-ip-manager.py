@@ -307,9 +307,10 @@ def main():
             conn.setopt(pycurl.URL, '%s/watch/services' % api)
             conn.setopt(pycurl.WRITEFUNCTION, receive_event)
             conn.perform()
+            status = conn.getinfo(pycurl.HTTP_CODE)
 
-            logging.warn('curl failed (returncode=%d); sleeping before retry',
-                         p.returncode)
+            logging.warn('request ended (status=%d); sleeping before reconnect',
+                         status)
             time.sleep(5)
     finally:
         mgr.remove_all()

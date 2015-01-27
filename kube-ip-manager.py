@@ -269,11 +269,19 @@ def parse_args():
     return p.parse_args()
 
 
+# XXX: I think technically we're violating the curl api here, which says,
+# "The callback function will be passed as much data as possible in all
+# invokes, but you must not make any assumptions. It may be one byte, it
+# may be thousands."  In this code, we're assuming that this function gets
+# called once/line of data received from the server, which seems to work in
+# practice.
 def receive_event(data):
+
     try:
         event = json.loads(data)
     except ValueError:
         logging.error('failed to decode: %s', data)
+        return
 
     if event['object']['kind'] != 'Service':
         return
@@ -306,6 +314,7 @@ def main():
             conn = pycurl.Curl()
             conn.setopt(pycurl.URL, '%s/watch/services' % api)
             conn.setopt(pycurl.WRITEFUNCTION, receive_event)
+            conn.setopt(pycurl.FOLLOWLOCATION, 1)
 
             try:
                 conn.perform()

@@ -35,6 +35,11 @@ class ServiceWatcher (Process):
                         self.log.error('failed to decode server response')
                         break
 
+                    service = event['object']
+                    self.log.debug('received %s for %s',
+                                   event['type'],
+                                   service['id'])
+
                     handler = getattr(self, 'handle_%s' %
                                       event['type'].lower())
 
@@ -42,7 +47,7 @@ class ServiceWatcher (Process):
                         self.log.warn('unknown event: %(type)s' % event)
                         continue
 
-                    handler(event['object'])
+                    handler(service)
             else:
                 self.log.error('request failed (%d): %s',
                                r.status_code,
@@ -52,19 +57,16 @@ class ServiceWatcher (Process):
             time.sleep(self.reconnect_interval)
 
     def handle_added(self, service):
-        self.log.info('added: %s', service)
         self.q.put({'message': 'add-service',
-                    'data': {'service': service}})
+                    'service': service})
 
     def handle_deleted(self, service):
-        self.log.info('deleted: %s', service)
         self.q.put({'message': 'delete-service',
-                    'data': {'service': service}})
+                    'service': service})
 
     def handle_modified(self, service):
-        self.log.info('modified: %s', service)
         self.q.put({'message': 'update-service',
-                    'data': {'service': service}})
+                    'service': service})
 
 
 if __name__ == '__main__':

@@ -85,16 +85,20 @@ class AddressWatcher (Process):
     def handle_set(self, relkey, node):
         try:
             dir, address, name = relkey.split('/')
+            owner = node['value']
+
+            self.log.info('set: %s %s %s', dir, address, name)
+            self.q.put({'message': 'acquire-lock',
+                        'data': {'address': address,
+                                 'owner': owner}})
         except ValueError:
-            self.log.error('invalid set operation on: %s', relkey)
-            return
+            try:
+                dir, address = relkey.split('/')
+                self.handle_create(relkey, node)
+            except ValueError:
+                self.log.error('invalid set operation on: %s', relkey)
+                return
 
-        owner = node['value']
-
-        self.log.info('set: %s %s %s', dir, address, name)
-        self.q.put({'message': 'acquire-lock',
-                    'data': {'address': address,
-                             'owner': owner}})
 
     def handle_expire(self, relkey, node):
         self.log.info('expire: %s %s', relkey, node)

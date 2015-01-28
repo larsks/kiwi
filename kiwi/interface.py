@@ -68,3 +68,6 @@ class Interface (object):
         except subprocess.CalledProcessError as exc:
             raise InterfaceDriverError(status=exc)
 
+    def cleanup(self):
+        self.remove_labelled_addresses()
+

@@ -12,6 +12,7 @@ import addresswatcher
 import servicewatcher
 import defaults
 import interface
+import firewall
 
 LOG = logging.getLogger('kiwi')
 
@@ -81,8 +82,11 @@ def main():
 
     if args.no_driver:
         iface_driver = None
+        fw_driver = None
     else:
         iface_driver = interface.Interface(args.interface)
+        fw_driver = firewall.Firewall(fwchain=args.fwchain,
+                                      fwmark=args.fwmark)
 
     mqueue = Queue()
     mgr = manager.Manager(mqueue,
@@ -90,6 +94,7 @@ def main():
                           kube_endpoint=args.kube_endpoint,
                           etcd_prefix=args.etcd_prefix,
                           iface_driver=iface_driver,
+                          fw_driver=fw_driver,
                           cidr_ranges=args.cidr_range,
                           refresh_interval=args.refresh_interval,
                           id=args.agent_id)

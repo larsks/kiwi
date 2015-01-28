@@ -20,6 +20,7 @@ class Manager (object):
                  etcd_endpoint=defaults.etcd_endpoint,
                  etcd_prefix=defaults.etcd_prefix,
                  iface_driver=None,
+                 fw_driver=None,
                  cidr_ranges=None,
                  refresh_interval=defaults.refresh_interval):
 
@@ -35,6 +36,7 @@ class Manager (object):
         self.etcd_prefix = etcd_prefix
         self.kube_endpoint = kube_endpoint
         self.iface_driver = iface_driver
+        self.fw_driver = fw_driver
         self.cidr_ranges = cidr_ranges
 
         if self.cidr_ranges:
@@ -174,6 +176,13 @@ class Manager (object):
                               address)
                 continue
 
+            if self.fw_driver:
+                try:
+                    self.fw_driver.add_service(address, service)
+                except FirewallDriverError as exc:
+                    self.log.error('failed to configure host firewall: %d',
+                                   exc.returncode)
+
             try:
                 self.addresses[address]['count'] += 1
             except KeyError:
@@ -189,6 +198,13 @@ class Manager (object):
         service = msg['service']
 
         for address in service.get('publicIPs', []):
+            if self.fw_driver:
+                try:
+                    self.fw_driver.remove_service(address, service)
+                except FirewallDriverError as exc:
+                    self.log.error('failed to configure host firewall: %d',
+                                   exc.returncode)
+
             if address in self.addresses:
                 self.addresses[address]['count'] -= 1
                 if not self.address_is_active(address):
@@ -221,6 +237,12 @@ class Manager (object):
 
     def cleanup(self):
         self.release_all_addresses()
+        
+        if self.fw_driver:
+            self.fw_driver.cleanup()
+
+        if self.iface_driver:
+            self.iface_driver.cleanup()
 
 
 if __name__ == '__main__':

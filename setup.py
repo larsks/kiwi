@@ -1,9 +1,9 @@
-from distutils.core import setup
+from setuptools import setup, find_packages
 
 with open('requirements.txt') as fd:
     setup(name='kiwi',
           version='1',
-          packages=['kiwi'],
+          packages=find_packages(),
           install_requires=fd.readlines(),
           entry_points={
               'console_scripts': [

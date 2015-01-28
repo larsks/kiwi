@@ -22,33 +22,34 @@ class Manager (object):
             self.etcd_prefix = '/kube'
 
             self.q = Queue()
-            self.watch_address = AddressWatcher(self.q)
-            self.watch_service = ServiceWatcher(self.q)
+            self.workers = [AddressWatcher(self.q),
+                            ServiceWatcher(self.q)]
             self.addresses = set()
 
     def run(self):
-            self.watch_address.start()
-            last_refresh = 0
+        [worker.start() for worker in self.workers]
 
-            while True:
-                try:
-                    msg = self.q.get(True, self.refresh_interval)
-                    handler = getattr(self,
-                                      'handle_%s' % msg['message'].replace('-', '_'),
-                                      None)
+        last_refresh = 0
 
-                    if not handler:
-                        self.log.warn('unhandled message: %s', msg['message'])
-                        continue
+        while True:
+            try:
+                msg = self.q.get(True, self.refresh_interval)
+                handler = getattr(self,
+                                  'handle_%s' % msg['message'].replace('-', '_'),
+                                  None)
 
-                    handler(msg)
-                except QueueEmpty:
-                    pass
+                if not handler:
+                    self.log.warn('unhandled message: %s', msg['message'])
+                    continue
 
-                now = time.time()
-                if now > last_refresh + self.refresh_interval:
-                    self.refresh()
-                    last_refresh = now
+                handler(msg)
+            except QueueEmpty:
+                pass
+
+            now = time.time()
+            if now > last_refresh + self.refresh_interval:
+                self.refresh()
+                last_refresh = now
 
     def refresh(self):
         self.log.info('refresh')
@@ -56,6 +57,7 @@ class Manager (object):
             self.refresh_address(address)
 
     def refresh_address(self, address):
+        self.log.info('refresh %s', address)
         r = requests.put('%s/v2/keys%s/publicips/%s/lock' % (self.etcd_api,
                                                           self.etcd_prefix,
                                                           address),
@@ -114,10 +116,16 @@ class Manager (object):
             self.release_address(address)
 
     def register_address(self, address):
-        pass
+        self.log.info('register address %s', address)
+        self.claim_address(address)
 
     def handle_add_service(self, msg):
         service = msg['data']['service']
+        if not 'publicIPs' in service:
+            self.log.info('ignoring service %s with no public ips',
+                          service['id'])
+            return
+
         for address in service['publicIPs']:
                 self.register_address(address)
 
@@ -135,6 +143,8 @@ class Manager (object):
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
+    l = logging.getLogger('requests')
+    l.setLevel(logging.WARN)
     m = Manager()
     m.run()
 

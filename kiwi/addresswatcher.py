@@ -3,12 +3,11 @@ import requests
 import time
 import re
 from multiprocessing import Process
-from itertools import izip
 
 import defaults
-from utils import iter_lines
 
 re_address = re.compile('\d+\.\d+\.\d+\.\d+')
+
 
 class AddressWatcher (Process):
     log = logging.getLogger('kiwi.addresswatcher')
@@ -90,4 +89,3 @@ if __name__ == '__main__':
     while True:
         msg = q.get()
         print 'msg:', msg
-

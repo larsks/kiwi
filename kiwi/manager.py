@@ -1,12 +1,12 @@
 import requests
 import uuid
-import select
 import time
 import logging
 
 from Queue import Empty as QueueEmpty
-from multiprocessing import Queue, Process
+from multiprocessing import Process
 import defaults
+
 
 class Manager (Process):
     log = logging.getLogger('kiwi.manager')
@@ -24,7 +24,7 @@ class Manager (Process):
             id = str(uuid.uuid1())
 
         self.id = id
-        self.refresh_interval=10
+        self.refresh_interval = 10
 
         self.etcd_endpoint = etcd_endpoint
         self.etcd_prefix = etcd_prefix
@@ -43,9 +43,10 @@ class Manager (Process):
                                msg['message'])
                 self.log.debug('state dump: %s', self.addresses)
 
-                handler = getattr(self,
-                                  'handle_%s' % msg['message'].replace('-', '_'),
-                                  None)
+                handler = getattr(
+                    self,
+                    'handle_%s' % msg['message'].replace('-', '_'),
+                    None)
 
                 if not handler:
                     self.log.debug('unhandled message: %s', msg['message'])
@@ -123,8 +124,8 @@ class Manager (Process):
 
         if not r.ok:
             self.log.error('failed to release %s: %s',
-                          address,
-                          r.reason)
+                           address,
+                           r.reason)
         else:
             self.log.warn('released %s', address)
 
@@ -185,4 +186,3 @@ if __name__ == '__main__':
     l.setLevel(logging.WARN)
     m = Manager()
     m.run()
-

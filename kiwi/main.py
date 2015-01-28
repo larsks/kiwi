@@ -14,6 +14,7 @@ import defaults
 
 LOG = logging.getLogger('kiwi')
 
+
 def parse_args():
     p = argparse.ArgumentParser()
 
@@ -87,4 +88,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

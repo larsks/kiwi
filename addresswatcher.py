@@ -24,13 +24,20 @@ class AddressWatcher (Process):
         self.etcd_prefix = etcd_prefix
 
     def run(self):
+        waitindex = 0
+
         while True:
+            self.log.debug('watching from waitindex = %s', waitindex)
             r = requests.get('%s/keys%s/publicips' % (self.etcd_api,
                                                       self.etcd_prefix),
                              params={'recursive': 'true',
-                                     'wait': 'true'})
+                                     'wait': 'true',
+                                     'waitIndex': waitindex})
             if r.ok:
                 event = r.json()
+                self.log.debug('event: %s', event)
+                waitindex = event['node']['modifiedIndex'] + 1
+
                 handler = getattr(self, 'handle_%s' %
                                   event['action'].lower(), None)
 

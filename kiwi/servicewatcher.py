@@ -5,9 +5,8 @@ import time
 from multiprocessing import Process
 from itertools import izip
 
+import defaults
 from utils import iter_lines
-
-default_kube_endpoint = 'http://localhost:8080'
 
 
 class ServiceWatcher (Process):
@@ -15,8 +14,8 @@ class ServiceWatcher (Process):
 
     def __init__(self,
                  queue,
-                 reconnect_interval=5,
-                 kube_endpoint=default_kube_endpoint):
+                 reconnect_interval=defaults.reconnect_interval,
+                 kube_endpoint=defaults.kube_endpoint):
         super(ServiceWatcher, self).__init__()
 
         self.q = queue

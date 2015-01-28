@@ -5,3 +5,4 @@ fwchain = 'KUBE-PUBLIC'
 fwmark = 1
 etcd_prefix = '/kiwi'
 refresh_interval = 10
+reconnect_interval = 5

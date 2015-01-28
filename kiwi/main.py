@@ -20,6 +20,12 @@ def parse_args():
     p = argparse.ArgumentParser()
 
     p.add_argument('--agent-id', '--id')
+    p.add_argument('--refresh-interval',
+                   default=defaults.refresh_interval,
+                   type=int)
+    p.add_argument('--reconnect-interval',
+                   default=defaults.reconnect_interval,
+                   type=int)
 
     g = p.add_argument_group('API endpoints')
     g.add_argument('--kube-endpoint', '-k',
@@ -85,10 +91,16 @@ def main():
                           etcd_prefix=args.etcd_prefix,
                           iface_driver=iface_driver,
                           cidr_ranges=args.cidr_range,
+                          refresh_interval=args.refresh_interval,
                           id=args.agent_id)
 
-    workers = [addresswatcher.AddressWatcher(mqueue),
-               servicewatcher.ServiceWatcher(mqueue)]
+    LOG.info('My id is: %s', mgr.id)
+
+    workers = [addresswatcher.AddressWatcher(mqueue,
+                                             etcd_endpoint=args.etcd_endpoint,
+                                             etcd_prefix=args.etcd_prefix),
+               servicewatcher.ServiceWatcher(mqueue,
+                                             kube_endpoint=args.kube_endpoint)]
 
     for worker in workers:
         worker.start()

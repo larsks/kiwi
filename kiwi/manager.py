@@ -29,7 +29,7 @@ class Manager (object):
             id = str(uuid.uuid1())
 
         self.id = id
-        self.refresh_interval = 10
+        self.refresh_interval = refresh_interval
 
         self.etcd_endpoint = etcd_endpoint
         self.etcd_prefix = etcd_prefix

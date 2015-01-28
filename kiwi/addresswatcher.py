@@ -15,12 +15,14 @@ class AddressWatcher (Process):
     def __init__(self,
                  queue,
                  etcd_endpoint=defaults.etcd_endpoint,
-                 etcd_prefix=defaults.etcd_prefix):
+                 etcd_prefix=defaults.etcd_prefix,
+                 reconnect_interval=defaults.reconnect_interval):
         super(AddressWatcher, self).__init__()
 
         self.q = queue
         self.etcd_endpoint = etcd_endpoint
         self.etcd_prefix = etcd_prefix
+        self.reconnect_interval = reconnect_interval
 
     def run(self):
         waitindex = None
@@ -56,7 +58,7 @@ class AddressWatcher (Process):
                 self.log.error('request failed (%d): %s',
                                r.status_code,
                                r.reason)
-                time.sleep(5)
+                time.sleep(self.reconnect_interval)
 
     def handle_create(self, address, node):
         self.q.put({'message': 'create-address',
@@ -72,6 +74,8 @@ class AddressWatcher (Process):
         self.q.put({'message': 'delete-address',
                     'address': address,
                     'node': node})
+
+    handle_compareanddelete = handle_delete
 
     def handle_expire(self, address, node):
         self.q.put({'message': 'expire-address',

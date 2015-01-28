@@ -82,6 +82,3 @@ class Firewall (object):
         except subprocess.CalledProcessError as exc:
             raise FirewallDriverError(status=exc)
 
-logging.basicConfig(level=logging.DEBUG)
-f = Firewall()
-

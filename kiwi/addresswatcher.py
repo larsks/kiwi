@@ -26,39 +26,49 @@ class AddressWatcher (Process):
 
     def run(self):
         waitindex = None
+        url = '%s/v2/keys%s/publicips' % (self.etcd_endpoint,
+                                          self.etcd_prefix)
 
         while True:
             self.log.debug('watching from waitindex = %s', waitindex)
-            r = requests.get('%s/v2/keys%s/publicips' % (self.etcd_endpoint,
-                                                         self.etcd_prefix),
-                             params={'recursive': 'true',
-                                     'wait': 'true',
-                                     'waitIndex': waitindex})
-            if r.ok:
-                event = r.json()
-                self.log.debug('event: %s', event)
-                waitindex = event['node']['modifiedIndex'] + 1
 
-                node = event['node']
-                address = node['key'].split('/')[-1]
-
-                if not re_address.match(address):
-                    self.log.error('invalid address %s', address)
-                    continue
-
-                handler = getattr(self, 'handle_%s' %
-                                  event['action'].lower(), None)
-
-                if not handler:
-                    self.log.debug('unknown event: %(action)s' % event)
-                    continue
-
-                handler(address, node)
+            try:
+                r = requests.get(url,
+                                 params={'recursive': 'true',
+                                         'wait': 'true',
+                                         'waitIndex': waitindex})
+            except Exception as exc:
+                self.log.error('connection to %s failed: %s',
+                               url,
+                               exc)
             else:
-                self.log.error('request failed (%d): %s',
-                               r.status_code,
-                               r.reason)
-                time.sleep(self.reconnect_interval)
+                if r.ok:
+                    event = r.json()
+                    self.log.debug('event: %s', event)
+                    waitindex = event['node']['modifiedIndex'] + 1
+
+                    node = event['node']
+                    address = node['key'].split('/')[-1]
+
+                    if not re_address.match(address):
+                        self.log.error('invalid address %s', address)
+                        continue
+
+                    handler = getattr(self, 'handle_%s' %
+                                      event['action'].lower(), None)
+
+                    if not handler:
+                        self.log.debug('unknown event: %(action)s' % event)
+                        continue
+
+                    handler(address, node)
+                    continue
+                else:
+                    self.log.error('request failed (%d): %s',
+                                   r.status_code,
+                                   r.reason)
+
+            time.sleep(self.reconnect_interval)
 
     def handle_create(self, address, node):
         self.q.put({'message': 'create-address',

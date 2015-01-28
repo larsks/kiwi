@@ -95,42 +95,53 @@ class Manager (object):
         assert self.addresses[address]['claimed']
 
         self.log.info('refresh %s', address)
-        r = requests.put(self.url_for(address),
-                         params={'prevValue': self.id,
-                                 'ttl': self.refresh_interval * 2},
-                         data={'value': self.id})
-
-        if not r.ok:
-            self.log.error('failed to refresh claim on %s: %s',
-                           address,
-                           r.reason)
-            self.release_address(address)
+        try:
+            r = requests.put(self.url_for(address),
+                             params={'prevValue': self.id,
+                                     'ttl': self.refresh_interval * 2},
+                             data={'value': self.id})
+        except requests.ConnectionError as exc:
+            self.log.error('connection to %s failed: %s',
+                           self.url_for(address),
+                           exc)
+        else:
+            if not r.ok:
+                self.log.error('failed to refresh claim on %s: %s',
+                               address,
+                               r.reason)
+                self.release_address(address)
 
     def claim_address(self, address):
         assert address in self.addresses
 
-        r = requests.put(self.url_for(address),
-                         params={'prevExist': 'false',
-                                 'ttl': self.refresh_interval*2},
-                         data={'value': self.id})
-
-        if not r.ok:
-            # We log failures at debug level because we expect to see
-            # failures here if another node asserts a claim first.
-            self.log.debug('failed to claim %s: %s',
-                           address,
-                           r.reason)
+        try:
+            r = requests.put(self.url_for(address),
+                             params={'prevExist': 'false',
+                                     'ttl': self.refresh_interval*2},
+                             data={'value': self.id})
+        except requests.ConnectionError as exc:
+            self.log.error('connection to %s failed: %s',
+                           self.url_for(address),
+                           exc)
             return
+        else:
+            if not r.ok:
+                # We log failures at debug level because we expect to see
+                # failures here if another node asserts a claim first.
+                self.log.debug('failed to claim %s: %s',
+                               address,
+                               r.reason)
+                return
 
-        self.log.warn('claimed %s', address)
-        self.addresses[address]['claimed'] = True
+            self.log.warn('claimed %s', address)
+            self.addresses[address]['claimed'] = True
 
-        if self.iface_driver:
-            try:
-                self.iface_driver.add_address(address)
-            except InterfaceDriverError as exc:
-                self.log.error('failed to configure address on system: %d',
-                               exc.status.returncode)
+            if self.iface_driver:
+                try:
+                    self.iface_driver.add_address(address)
+                except InterfaceDriverError as exc:
+                    self.log.error('failed to configure address on system: %d',
+                                   exc.status.returncode)
 
     def release_address(self, address):
         if not self.address_is_claimed(address):
@@ -140,15 +151,20 @@ class Manager (object):
 
         self.addresses[address]['claimed'] = False
 
-        r = requests.delete(self.url_for(address),
-                            params={'prevValue': self.id})
-
-        if not r.ok:
-            self.log.error('failed to release %s: %s',
-                           address,
-                           r.reason)
+        try:
+            r = requests.delete(self.url_for(address),
+                                params={'prevValue': self.id})
+        except requests.ConnectionError as exc:
+            self.log.error('connection to %s failed: %s',
+                           self.url_for(address),
+                           exc)
         else:
-            self.log.warn('released %s', address)
+            if not r.ok:
+                self.log.error('failed to release %s: %s',
+                               address,
+                               r.reason)
+            else:
+                self.log.warn('released %s', address)
 
         if self.iface_driver:
             try:

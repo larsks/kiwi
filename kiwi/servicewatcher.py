@@ -23,36 +23,43 @@ class ServiceWatcher (Process):
         self.reconnect_interval = reconnect_interval
 
     def run(self):
+        url = '%s/watch/services' % self.kube_api
+
         while True:
-            r = requests.get('%s/watch/services' % self.kube_api, stream=True)
-            if r.ok:
-                lines = iter_lines(r.raw)
-                for datalen, data, marker in izip(lines, lines, lines):
-                    try:
-                        event = json.loads(data)
-                    except ValueError:
-                        self.log.error('failed to decode server response')
-                        break
-
-                    service = event['object']
-                    self.log.debug('received %s for %s',
-                                   event['type'],
-                                   service['id'])
-
-                    handler = getattr(self, 'handle_%s' %
-                                      event['type'].lower())
-
-                    if not handler:
-                        self.log.warn('unknown event: %(type)s' % event)
-                        continue
-
-                    handler(service)
+            try:
+                r = requests.get(url, stream=True)
+            except Exception as exc:
+                self.log.error('connecting to %s failed: %s',
+                               url,
+                               exc)
             else:
-                self.log.error('request failed (%d): %s',
-                               r.status_code,
-                               r.reason)
+                if r.ok:
+                    lines = iter_lines(r.raw)
+                    for datalen, data, marker in izip(lines, lines, lines):
+                        try:
+                            event = json.loads(data)
+                        except ValueError:
+                            self.log.error('failed to decode server response')
+                            break
 
-            self.log.warn('reconnecting to server')
+                        service = event['object']
+                        self.log.debug('received %s for %s',
+                                       event['type'],
+                                       service['id'])
+
+                        handler = getattr(self, 'handle_%s' %
+                                          event['type'].lower())
+
+                        if not handler:
+                            self.log.warn('unknown event: %(type)s' % event)
+                            continue
+
+                        handler(service)
+                else:
+                    self.log.error('request failed (%d): %s',
+                                   r.status_code,
+                                   r.reason)
+
             time.sleep(self.reconnect_interval)
 
     def handle_added(self, service):

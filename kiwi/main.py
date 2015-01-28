@@ -11,6 +11,7 @@ import manager
 import addresswatcher
 import servicewatcher
 import defaults
+import interface
 
 LOG = logging.getLogger('kiwi')
 
@@ -38,6 +39,8 @@ def parse_args():
                    default=defaults.fwmark)
     g.add_argument('--cidr-range', '-r',
                    action='append')
+    g.add_argument('--no-driver', '-n',
+                   action='store_true')
 
     g = p.add_argument_group('Logging options')
     g.add_argument('--verbose', '-v',
@@ -70,11 +73,17 @@ def main():
     LOG.info('Etcd is %s', args.etcd_endpoint)
     LOG.info('Managing interface %s', args.interface)
 
+    if args.no_driver:
+        iface_driver = None
+    else:
+        iface_driver = interface.Interface(args.interface)
+
     mqueue = Queue()
     mgr = manager.Manager(mqueue,
                           etcd_endpoint=args.etcd_endpoint,
                           kube_endpoint=args.kube_endpoint,
                           etcd_prefix=args.etcd_prefix,
+                          iface_driver=iface_driver,
                           id=args.agent_id)
 
     workers = [addresswatcher.AddressWatcher(mqueue),
@@ -83,8 +92,10 @@ def main():
     for worker in workers:
         worker.start()
 
-    mgr.start()
-    mgr.join()
+    try:
+        mgr.run()
+    finally:
+        mgr.cleanup()
 
 if __name__ == '__main__':
     main()

@@ -5,10 +5,12 @@ import logging
 
 from Queue import Empty as QueueEmpty
 from multiprocessing import Process
+
+from exc import *
 import defaults
 
 
-class Manager (Process):
+class Manager (object):
     log = logging.getLogger('kiwi.manager')
 
     def __init__(self, mqueue,
@@ -16,6 +18,7 @@ class Manager (Process):
                  kube_endpoint=defaults.kube_endpoint,
                  etcd_endpoint=defaults.etcd_endpoint,
                  etcd_prefix=defaults.etcd_prefix,
+                 iface_driver=None,
                  refresh_interval=defaults.refresh_interval):
 
         super(Manager, self).__init__()
@@ -29,6 +32,7 @@ class Manager (Process):
         self.etcd_endpoint = etcd_endpoint
         self.etcd_prefix = etcd_prefix
         self.kube_endpoint = kube_endpoint
+        self.iface_driver = iface_driver
 
         self.q = mqueue
         self.addresses = {}
@@ -111,6 +115,13 @@ class Manager (Process):
         self.log.warn('claimed %s', address)
         self.addresses[address]['claimed'] = True
 
+        if self.iface_driver:
+            try:
+                self.iface_driver.add_address(address)
+            except InterfaceDriverError as exc:
+                self.log.error('failed to configure address on system: %d',
+                               exc.status.returncode)
+
     def release_address(self, address):
         if not self.address_is_claimed(address):
             self.log.debug('not releasing unclaimed address %s',
@@ -128,6 +139,13 @@ class Manager (Process):
                            r.reason)
         else:
             self.log.warn('released %s', address)
+
+        if self.iface_driver:
+            try:
+                self.iface_driver.remove_address(address)
+            except InterfaceDriverError as exc:
+                self.log.error('failed to remove address on system: %d',
+                               exc.status.returncode)
 
     def remove_address(self, address):
         assert address in self.addresses
@@ -178,6 +196,9 @@ class Manager (Process):
     def address_is_claimed(self, address):
         return (address in self.addresses and
                 self.addresses[address]['claimed'])
+
+    def cleanup(self):
+        self.release_all_addresses()
 
 
 if __name__ == '__main__':

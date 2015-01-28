@@ -84,6 +84,7 @@ def main():
                           kube_endpoint=args.kube_endpoint,
                           etcd_prefix=args.etcd_prefix,
                           iface_driver=iface_driver,
+                          cidr_ranges=args.cidr_range,
                           id=args.agent_id)
 
     workers = [addresswatcher.AddressWatcher(mqueue),

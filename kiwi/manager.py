@@ -2,6 +2,7 @@ import requests
 import uuid
 import time
 import logging
+import netaddr
 
 from Queue import Empty as QueueEmpty
 from multiprocessing import Process
@@ -19,6 +20,7 @@ class Manager (object):
                  etcd_endpoint=defaults.etcd_endpoint,
                  etcd_prefix=defaults.etcd_prefix,
                  iface_driver=None,
+                 cidr_ranges=None,
                  refresh_interval=defaults.refresh_interval):
 
         super(Manager, self).__init__()
@@ -33,6 +35,11 @@ class Manager (object):
         self.etcd_prefix = etcd_prefix
         self.kube_endpoint = kube_endpoint
         self.iface_driver = iface_driver
+        self.cidr_ranges = cidr_ranges
+
+        if self.cidr_ranges:
+            self.cidr_ranges = [netaddr.IPNetwork(n)
+                                for n in cidr_ranges]
 
         self.q = mqueue
         self.addresses = {}
@@ -162,6 +169,11 @@ class Manager (object):
         service = msg['service']
 
         for address in service.get('publicIPs', []):
+            if not self.address_is_valid(address):
+                self.log.warn('ignoring invalid address %s',
+                              address)
+                continue
+
             try:
                 self.addresses[address]['count'] += 1
             except KeyError:
@@ -196,6 +208,16 @@ class Manager (object):
     def address_is_claimed(self, address):
         return (address in self.addresses and
                 self.addresses[address]['claimed'])
+
+    def address_is_valid(self, address):
+        if self.cidr_ranges is None:
+            return True
+
+        for net in self.cidr_ranges:
+            if address in net:
+                return True
+
+        return False
 
     def cleanup(self):
         self.release_all_addresses()

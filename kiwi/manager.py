@@ -52,8 +52,9 @@ class Manager (object):
         while True:
             try:
                 msg = self.q.get(True, self.refresh_interval)
-                self.log.debug('dequeued message %s',
-                               msg['message'])
+                self.log.debug('dequeued message %s for %s',
+                               msg['message'],
+                               msg['target'])
                 self.log.debug('state dump: %s', self.addresses)
 
                 handler = getattr(
@@ -176,6 +177,10 @@ class Manager (object):
                               address)
                 continue
 
+            self.log.info('adding service %s on %s',
+                          service['id'],
+                          address)
+
             if self.fw_driver:
                 try:
                     self.fw_driver.add_service(address, service)
@@ -198,6 +203,15 @@ class Manager (object):
         service = msg['service']
 
         for address in service.get('publicIPs', []):
+            if not self.address_is_valid(address):
+                self.log.warn('ignoring invalid address %s',
+                              address)
+                continue
+
+            self.log.info('removing service %s on %s',
+                          service['id'],
+                          address)
+
             if self.fw_driver:
                 try:
                     self.fw_driver.remove_service(address, service)

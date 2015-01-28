@@ -57,14 +57,17 @@ class ServiceWatcher (Process):
 
     def handle_added(self, service):
         self.q.put({'message': 'add-service',
+                    'target': service['id'],
                     'service': service})
 
     def handle_deleted(self, service):
         self.q.put({'message': 'delete-service',
+                    'target': service['id'],
                     'service': service})
 
     def handle_modified(self, service):
         self.q.put({'message': 'update-service',
+                    'target': service['id'],
                     'service': service})
 
 

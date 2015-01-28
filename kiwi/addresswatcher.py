@@ -62,16 +62,19 @@ class AddressWatcher (Process):
 
     def handle_create(self, address, node):
         self.q.put({'message': 'create-address',
+                    'target': address,
                     'address': address,
                     'node': node})
 
     def handle_set(self, address, node):
         self.q.put({'message': 'set-address',
+                    'target': address,
                     'address': address,
                     'node': node})
 
     def handle_delete(self, address, node):
         self.q.put({'message': 'delete-address',
+                    'target': address,
                     'address': address,
                     'node': node})
 
@@ -79,6 +82,7 @@ class AddressWatcher (Process):
 
     def handle_expire(self, address, node):
         self.q.put({'message': 'expire-address',
+                    'target': address,
                     'address': address,
                     'node': node})
 

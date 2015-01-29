@@ -16,6 +16,15 @@ Kiwi uses etcd to coordinate assignments between multiple systems.  If
 Kiwi stops running on one system, any active ip addresses will be
 assigned on the remaining systems.
 
+## Using Kiwi
+
+The easiest way to use Kiwi is to use the docker image:
+
+    docker run --privileged --net=host larsks/kiwi --interface br0 --verbose
+
+Kiwi needs `--net=host` and `--privileged` because it will be
+modifying your host iptables and network interface configuration.
+
 ## Example
 
 Assume that you have a Kubernetes service definition like this:

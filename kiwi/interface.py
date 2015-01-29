@@ -4,13 +4,14 @@ import subprocess
 
 from exc import *
 
-# 5: br0    inet 192.168.1.42/32 scope global br0:kube\       valid_lft forever preferred_lft forever
-
 re_label = re.compile(r'''\d+: \s+ (?P<ifname>\S+) \s+ inet \s+
                       (?P<ipv4addr>\S+) \s+ scope \s+ (?P<scope>\S+) \s+
                       (?P<flags>.*)''', re.VERBOSE)
 
+
 class Interface (object):
+    '''This is a network interface driver for Kiwi.  It is responsible for
+    adding and removing address to and from network interfaces.'''
 
     log = logging.getLogger('kiwi.interface')
 
@@ -23,14 +24,19 @@ class Interface (object):
         self.remove_labelled_addresses()
 
     def remove_labelled_addresses(self):
+        '''Remove all addresses labelled with self.label from
+        self.interface.'''
+
         try:
             out = subprocess.check_output([
                 'ip', '-o', 'addr', 'show',
                 'label', '%s:%s' % (self.interface, self.label)
-            ], stderr=subprocess.STDOUT)
+            ])
         except subprocess.CalledProcessError as exc:
             raise InterfaceDriverError(status=exc)
 
+        # we're parsing the output of the 'ip' command here, which always
+        # makes me nervous.
         for line in out.splitlines():
             m = re_label.match(line)
             if not m:
@@ -42,10 +48,15 @@ class Interface (object):
             self.remove_address(address)
 
     def add_address(self, address):
+        '''Add the given address to the managed interface.'''
         self.log.info('add address %s to device %s',
                       address,
                       self.interface)
         try:
+            # Note that we're using the 'label' option here to apply a
+            # label to the address.  This allows us to identify addresses
+            # that we have added, which in turns allows us to clean them up
+            # at startup without needing to otherwise preserve state.
             subprocess.check_call([
                 'ip', 'addr', 'add',
                 '%s/32' % address,
@@ -56,6 +67,7 @@ class Interface (object):
             raise InterfaceDriverError(status=exc)
 
     def remove_address(self, address):
+        '''Remove the given address from the managed interface.'''
         self.log.info('remove address %s from device %s',
                       address,
                       self.interface)
@@ -70,4 +82,3 @@ class Interface (object):
 
     def cleanup(self):
         self.remove_labelled_addresses()
-

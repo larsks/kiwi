@@ -8,13 +8,8 @@ RUN yum -y install \
 	iproute \
 	; yum clean all
 
-RUN yum -y install \
-	git \
-	; yum clean all
-
-RUN git clone -b cluster http://github.com/larsks/kube-ip-manager; \
-	cd kube-ip-manager; \
-	python setup.py install
+COPY . /src
+RUN cd /src; python setup.py install
 
 ENTRYPOINT ["/usr/bin/kiwi"]
 CMD ["--help"]

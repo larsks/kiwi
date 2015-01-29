@@ -9,8 +9,41 @@ import defaults
 from utils import iter_lines
 
 
+LOG = logging.getLogger('kiwi.servicewatcher')
+
+
+def iter_request_events(fd):
+    '''Iterate over the events from a Kubernetes event stream.'''
+
+    lines = iter_lines(fd)
+    for expected_len, data, marker in izip(lines, lines, lines):
+        expected_len = int(expected_len, base=16)
+        actual_len = len(data)
+        if expected_len != actual_len + 1:
+            raise ValueError('data length mismatch (expected %d, have %d)',
+                             expected_len,
+                             actual_len)
+
+        yield json.loads(data)
+
+
+def iter_events(url, interval=1):
+    '''Generates an infinite string of Kubernetes events'''
+
+    while True:
+        try:
+            r = requests.get(url, stream=True)
+            r.raise_for_status()
+            for event in iter_request_events(r.raw):
+                yield event
+        except Exception as exc:
+            LOG.error('connection failed: %s' % exc)
+            time.sleep(interval)
+
+
 class ServiceWatcher (Process):
-    log = logging.getLogger('kiwi.servicewatcher')
+    '''Watches the Kubernetes API for changes to services, and pushes
+    events onto the message queue.'''
 
     def __init__(self,
                  queue,
@@ -25,42 +58,22 @@ class ServiceWatcher (Process):
     def run(self):
         url = '%s/watch/services' % self.kube_api
 
-        while True:
-            try:
-                r = requests.get(url, stream=True)
-            except Exception as exc:
-                self.log.error('connecting to %s failed: %s',
-                               url,
-                               exc)
-            else:
-                if r.ok:
-                    lines = iter_lines(r.raw)
-                    for datalen, data, marker in izip(lines, lines, lines):
-                        try:
-                            event = json.loads(data)
-                        except ValueError:
-                            self.log.error('failed to decode server response')
-                            break
+        for event in iter_events(url, interval=self.reconnect_interval):
+            service = event['object']
+            LOG.debug('received %s for %s',
+                      event['type'],
+                      service['id'])
 
-                        service = event['object']
-                        self.log.debug('received %s for %s',
-                                       event['type'],
-                                       service['id'])
+            handler = getattr(self,
+                              'handle_%s' % event['type'].lower())
 
-                        handler = getattr(self, 'handle_%s' %
-                                          event['type'].lower())
+            # we log missing handlers at debug level because we probably
+            # intentionally have not written a handler for the event.
+            if not handler:
+                LOG.debug('unknown event: %(type)s' % event)
+                continue
 
-                        if not handler:
-                            self.log.warn('unknown event: %(type)s' % event)
-                            continue
-
-                        handler(service)
-                else:
-                    self.log.error('request failed (%d): %s',
-                                   r.status_code,
-                                   r.reason)
-
-            time.sleep(self.reconnect_interval)
+            handler(service)
 
     def handle_added(self, service):
         self.q.put({'message': 'add-service',
@@ -77,15 +90,15 @@ class ServiceWatcher (Process):
                     'target': service['id'],
                     'service': service})
 
-
 if __name__ == '__main__':
-    import multiprocessing
-    logging.basicConfig(level=logging.DEBUG)
+    from multiprocessing import Queue
+    import pprint
 
-    q = multiprocessing.Queue()
+    logging.basicConfig(level=logging.DEBUG)
+    q = Queue()
     s = ServiceWatcher(q)
     s.start()
 
     while True:
         msg = q.get()
-        print 'msg:', msg
+        pprint.pprint(msg)

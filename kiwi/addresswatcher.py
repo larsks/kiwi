@@ -6,7 +6,7 @@ from multiprocessing import Process
 
 import defaults
 
-LOG = logging.getLogger('kiwi.addresswatcher')
+LOG = logging.getLogger(__name__)
 re_address = re.compile('\d+\.\d+\.\d+\.\d+')
 
 

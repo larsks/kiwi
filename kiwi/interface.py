@@ -8,12 +8,12 @@ re_label = re.compile(r'''\d+: \s+ (?P<ifname>\S+) \s+ inet \s+
                       (?P<ipv4addr>\S+) \s+ scope \s+ (?P<scope>\S+) \s+
                       (?P<flags>.*)''', re.VERBOSE)
 
+LOG = logging.getLogger(__name__)
+
 
 class Interface (object):
     '''This is a network interface driver for Kiwi.  It is responsible for
     adding and removing address to and from network interfaces.'''
-
-    log = logging.getLogger('kiwi.interface')
 
     def __init__(self,
                  interface='eth0',
@@ -33,15 +33,15 @@ class Interface (object):
                 'label', '%s:%s' % (self.interface, self.label)
             ])
         except subprocess.CalledProcessError as exc:
-            raise InterfaceDriverError(status=exc)
+            raise InterfaceDriverError(reason=exc)
 
         # we're parsing the output of the 'ip' command here, which always
         # makes me nervous.
         for line in out.splitlines():
             m = re_label.match(line)
             if not m:
-                self.log.warn('unexpected interface configuration: %s',
-                              line)
+                LOG.warn('unexpected interface configuration: %s',
+                         line)
                 continue
 
             address = m.group('ipv4addr').split('/')[0]
@@ -49,9 +49,9 @@ class Interface (object):
 
     def add_address(self, address):
         '''Add the given address to the managed interface.'''
-        self.log.info('add address %s to device %s',
-                      address,
-                      self.interface)
+        LOG.info('add address %s to device %s',
+                 address,
+                 self.interface)
         try:
             # Note that we're using the 'label' option here to apply a
             # label to the address.  This allows us to identify addresses
@@ -64,13 +64,13 @@ class Interface (object):
                 'dev', self.interface
             ])
         except subprocess.CalledProcessError as exc:
-            raise InterfaceDriverError(status=exc)
+            raise InterfaceDriverError(reason=exc)
 
     def remove_address(self, address):
         '''Remove the given address from the managed interface.'''
-        self.log.info('remove address %s from device %s',
-                      address,
-                      self.interface)
+        LOG.info('remove address %s from device %s',
+                 address,
+                 self.interface)
         try:
             subprocess.check_call([
                 'ip', 'addr', 'del',
@@ -78,7 +78,7 @@ class Interface (object):
                 'dev', self.interface
             ])
         except subprocess.CalledProcessError as exc:
-            raise InterfaceDriverError(status=exc)
+            raise InterfaceDriverError(reason=exc)
 
     def cleanup(self):
         self.remove_labelled_addresses()

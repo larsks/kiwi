@@ -9,7 +9,7 @@ import defaults
 from utils import iter_lines
 
 
-LOG = logging.getLogger('kiwi.servicewatcher')
+LOG = logging.getLogger(__name__)
 
 
 def iter_request_events(fd):

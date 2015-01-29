@@ -14,7 +14,7 @@ import defaults
 import interface
 import firewall
 
-LOG = logging.getLogger('kiwi')
+LOG = logging.getLogger(__name__)
 
 
 def parse_args():

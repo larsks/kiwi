@@ -5,15 +5,15 @@ import logging
 import netaddr
 
 from Queue import Empty as QueueEmpty
-from multiprocessing import Process
 
 from exc import *
 import defaults
 
 
-class Manager (object):
-    log = logging.getLogger('kiwi.manager')
+LOG = logging.getLogger(__name__)
 
+
+class Manager (object):
     def __init__(self, mqueue,
                  id=None,
                  kube_endpoint=defaults.kube_endpoint,
@@ -52,10 +52,10 @@ class Manager (object):
         while True:
             try:
                 msg = self.q.get(True, self.refresh_interval)
-                self.log.debug('dequeued message %s for %s',
-                               msg['message'],
-                               msg['target'])
-                self.log.debug('state dump: %s', self.addresses)
+                LOG.debug('dequeued message %s for %s',
+                          msg['message'],
+                          msg['target'])
+                LOG.debug('state dump: %s', self.addresses)
 
                 handler = getattr(
                     self,
@@ -63,7 +63,7 @@ class Manager (object):
                     None)
 
                 if not handler:
-                    self.log.debug('unhandled message: %s', msg['message'])
+                    LOG.debug('unhandled message: %s', msg['message'])
                     continue
 
                 handler(msg)
@@ -76,13 +76,13 @@ class Manager (object):
                 last_refresh = now
 
     def refresh(self):
-        self.log.info('start refresh pass (%d addresses)',
-                      len(self.addresses))
+        LOG.info('start refresh pass (%d addresses)',
+                 len(self.addresses))
         for address in self.addresses.keys():
             if self.address_is_claimed(address):
                 self.refresh_address(address)
-        self.log.info('finished refresh pass (%d addresses)',
-                      len(self.addresses))
+        LOG.info('finished refresh pass (%d addresses)',
+                 len(self.addresses))
 
     def url_for(self, address):
         return '%s/v2/keys%s/publicips/%s' % (
@@ -94,21 +94,21 @@ class Manager (object):
         assert address in self.addresses
         assert self.addresses[address]['claimed']
 
-        self.log.info('refresh %s', address)
+        LOG.info('refresh %s', address)
         try:
             r = requests.put(self.url_for(address),
                              params={'prevValue': self.id,
                                      'ttl': self.refresh_interval * 2},
                              data={'value': self.id})
         except requests.ConnectionError as exc:
-            self.log.error('connection to %s failed: %s',
-                           self.url_for(address),
-                           exc)
+            LOG.error('connection to %s failed: %s',
+                      self.url_for(address),
+                      exc)
         else:
             if not r.ok:
-                self.log.error('failed to refresh claim on %s: %s',
-                               address,
-                               r.reason)
+                LOG.error('failed to refresh claim on %s: %s',
+                          address,
+                          r.reason)
                 self.release_address(address)
 
     def claim_address(self, address):
@@ -120,33 +120,33 @@ class Manager (object):
                                      'ttl': self.refresh_interval*2},
                              data={'value': self.id})
         except requests.ConnectionError as exc:
-            self.log.error('connection to %s failed: %s',
-                           self.url_for(address),
-                           exc)
+            LOG.error('connection to %s failed: %s',
+                      self.url_for(address),
+                      exc)
             return
         else:
             if not r.ok:
                 # We log failures at debug level because we expect to see
                 # failures here if another node asserts a claim first.
-                self.log.debug('failed to claim %s: %s',
-                               address,
-                               r.reason)
+                LOG.debug('failed to claim %s: %s',
+                          address,
+                          r.reason)
                 return
 
-            self.log.warn('claimed %s', address)
+            LOG.warn('claimed %s', address)
             self.addresses[address]['claimed'] = True
 
             if self.iface_driver:
                 try:
                     self.iface_driver.add_address(address)
                 except InterfaceDriverError as exc:
-                    self.log.error('failed to configure address on system: %d',
-                                   exc.status.returncode)
+                    LOG.error('failed to configure address on system: %d',
+                              exc.status.returncode)
 
     def release_address(self, address):
         if not self.address_is_claimed(address):
-            self.log.debug('not releasing unclaimed address %s',
-                           address)
+            LOG.debug('not releasing unclaimed address %s',
+                      address)
             return
 
         self.addresses[address]['claimed'] = False
@@ -155,28 +155,28 @@ class Manager (object):
             r = requests.delete(self.url_for(address),
                                 params={'prevValue': self.id})
         except requests.ConnectionError as exc:
-            self.log.error('connection to %s failed: %s',
-                           self.url_for(address),
-                           exc)
+            LOG.error('connection to %s failed: %s',
+                      self.url_for(address),
+                      exc)
         else:
             if not r.ok:
-                self.log.error('failed to release %s: %s',
-                               address,
-                               r.reason)
+                LOG.error('failed to release %s: %s',
+                          address,
+                          r.reason)
             else:
-                self.log.warn('released %s', address)
+                LOG.warn('released %s', address)
 
         if self.iface_driver:
             try:
                 self.iface_driver.remove_address(address)
             except InterfaceDriverError as exc:
-                self.log.error('failed to remove address on system: %d',
-                               exc.status.returncode)
+                LOG.error('failed to remove address on system: %d',
+                          exc.status.returncode)
 
     def remove_address(self, address):
         assert address in self.addresses
 
-        self.log.info('removing address %s', address)
+        LOG.info('removing address %s', address)
         self.release_address(address)
         del self.addresses[address]
 
@@ -189,20 +189,20 @@ class Manager (object):
 
         for address in service.get('publicIPs', []):
             if not self.address_is_valid(address):
-                self.log.warn('ignoring invalid address %s',
-                              address)
+                LOG.warn('ignoring invalid address %s',
+                         address)
                 continue
 
-            self.log.info('adding service %s on %s',
-                          service['id'],
-                          address)
+            LOG.info('adding service %s on %s',
+                     service['id'],
+                     address)
 
             if self.fw_driver:
                 try:
                     self.fw_driver.add_service(address, service)
                 except FirewallDriverError as exc:
-                    self.log.error('failed to configure host firewall: %d',
-                                   exc.returncode)
+                    LOG.error('failed to configure host firewall: %d',
+                              exc.returncode)
 
             try:
                 self.addresses[address]['count'] += 1
@@ -220,20 +220,20 @@ class Manager (object):
 
         for address in service.get('publicIPs', []):
             if not self.address_is_valid(address):
-                self.log.warn('ignoring invalid address %s',
-                              address)
+                LOG.warn('ignoring invalid address %s',
+                         address)
                 continue
 
-            self.log.info('removing service %s on %s',
-                          service['id'],
-                          address)
+            LOG.info('removing service %s on %s',
+                     service['id'],
+                     address)
 
             if self.fw_driver:
                 try:
                     self.fw_driver.remove_service(address, service)
                 except FirewallDriverError as exc:
-                    self.log.error('failed to configure host firewall: %d',
-                                   exc.returncode)
+                    LOG.error('failed to configure host firewall: %d',
+                              exc.returncode)
 
             if address in self.addresses:
                 self.addresses[address]['count'] -= 1
@@ -267,7 +267,7 @@ class Manager (object):
 
     def cleanup(self):
         self.release_all_addresses()
-        
+
         if self.fw_driver:
             self.fw_driver.cleanup()
 

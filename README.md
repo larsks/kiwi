@@ -1,10 +1,10 @@
-# Kubernetes IP Manager
+# Kiwi, the Kubernetes IP Manager
 
 This is a simple service for managing the assignment of IP addresses
 to network interfaces and the associated firewall rules for Kubernetes
 services.
 
-The `kube-ip-manager` service will listen for notifications from the
+The `kiwi` service will listen for notifications from the
 Kubernetes API regarding new or deleted services, and for those that
 contain a `publicIPs` element the service will:
 
@@ -12,8 +12,9 @@ contain a `publicIPs` element the service will:
   already been assigned,
 - Create `mangle` table rules to mark inbound traffic
 
-**NB** In it's current form this service is only useful for a
-single-node deployment of Kubernetes.
+Kiwi uses etcd to coordinate assignments between multiple systems.  If
+Kiwi stops running on one system, any active ip addresses will be
+assigned on the remaining systems.
 
 ## Example
 
@@ -28,16 +29,17 @@ Assume that you have a Kubernetes service definition like this:
     containerPort: 80
     publicIps:
       - 192.168.1.41
+      - 172.16.1.41
 
-If you run `kube-ip-manager` like this:
+If you run `kiwi` like this:
 
-    kube-ip-manager --interface em1
+    kiwi --interface em1 -r 192.168.1.0/24
 
 And then create the Kubernetes services:
 
     kubectl create -f web-service.yaml
 
-Then `kube-ip-manager` will:
+Then `kiwi` will:
 
 - Add address 192.168.1.42/32 to device `em1`:
 
@@ -49,8 +51,27 @@ Then `kube-ip-manager` will:
 
         -A KUBE-PUBLIC -d 192.168.1.41/32 -p tcp -m tcp --dport 8080 -m comment --comment web -j MARK --set-mark 1
 
+- Kiwi will ignore `172.16.1.41` because it does not match any valid
+  CIDR range.
+
 These changes will be removed if you delete the service.
 
-When `kube-ip-manager` exits, it will remove any addresses and
-firewall rules it created while it was running.
+When `kiwi` exits, it will remove any addresses and firewall rules it
+created while it was running.
+
+## Technical details
+
+Kiwi works by listening to the Kubernetes API at
+`/api/v1beta1/watch/services`.  As new services appear, Kiwi iterates
+over the list of ip addresses and attempts to create corresponding
+keys under the etcd prefix `/kiwi/publicips`.
+
+If it is able to successfully create an entry, the local Kiwi agent
+has "claimed" that address and will provision it locally.
+
+Addresses are set with a TTL (10 seconds by default).  The local kiwi
+agent will heartbeat on that address entry while it is running.  If
+the local agent stops running, the `/kiwi/publicips/x.x.x.x` entry
+will eventually expire, at which point another agent will attempt to
+claim.
 

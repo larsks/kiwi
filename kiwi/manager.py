@@ -4,7 +4,7 @@ import time
 import logging
 import netaddr
 
-from Queue import Empty as QueueEmpty
+import Queue
 
 from exc import *
 import defaults
@@ -61,7 +61,7 @@ class Manager (object):
                 LOG.debug('unhandled message %s for %s',
                           msg['message'],
                           msg['target'])
-            except QueueEmpty:
+            except Queue.Empty:
                 pass
 
             now = time.time()
@@ -79,11 +79,16 @@ class Manager (object):
     def refresh(self):
         LOG.info('start refresh pass (%d addresses)',
                  len(self.addresses))
+
+        claimed = 0
         for address in self.addresses.keys():
             if self.address_is_claimed(address):
+                claimed += 1
                 self.refresh_address(address)
-        LOG.info('finished refresh pass (%d addresses)',
-                 len(self.addresses))
+
+        LOG.info('finished refresh pass (%d addresses, %d claimed)',
+                 len(self.addresses),
+                 claimed)
 
     def url_for(self, address):
         return '%s/v2/keys%s/publicips/%s' % (

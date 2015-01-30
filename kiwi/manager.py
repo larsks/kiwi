@@ -55,18 +55,12 @@ class Manager (object):
                 LOG.debug('dequeued message %s for %s',
                           msg['message'],
                           msg['target'])
-                LOG.debug('state dump: %s', self.addresses)
 
-                handler = getattr(
-                    self,
-                    'handle_%s' % msg['message'].replace('-', '_'),
-                    None)
-
-                if not handler:
-                    LOG.debug('unhandled message: %s', msg['message'])
-                    continue
-
-                handler(msg)
+                self.handle_message(msg)
+            except AttributeError:
+                LOG.debug('unhandled message %s for %s',
+                          msg['message'],
+                          msg['target'])
             except QueueEmpty:
                 pass
 
@@ -74,6 +68,13 @@ class Manager (object):
             if now > last_refresh + self.refresh_interval:
                 self.refresh()
                 last_refresh = now
+
+    def handle_msg(self, msg):
+        handler = getattr(
+            self,
+            'handle_%s' % msg['message'].replace('-', '_'))
+
+        handler(msg)
 
     def refresh(self):
         LOG.info('start refresh pass (%d addresses)',

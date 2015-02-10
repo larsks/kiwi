@@ -2,7 +2,6 @@ import json
 import logging
 import requests
 import time
-from multiprocessing import Process
 from itertools import izip
 
 import defaults
@@ -41,21 +40,19 @@ def iter_events(url, interval=1):
             time.sleep(interval)
 
 
-class ServiceWatcher (Process):
-    '''Watches the Kubernetes API for changes to services, and pushes
-    events onto the message queue.'''
+class ServiceWatcher (object):
+    '''A ServiceWatcher is an iterator that watches the Kubernetes API for
+    changes to services, and yields these events as Python dictionaries.'''
 
     def __init__(self,
-                 queue,
                  reconnect_interval=defaults.reconnect_interval,
                  kube_endpoint=defaults.kube_endpoint):
         super(ServiceWatcher, self).__init__()
 
-        self.q = queue
         self.kube_api = '%s/api/v1beta1' % kube_endpoint
         self.reconnect_interval = reconnect_interval
 
-    def run(self):
+    def __iter__(self):
         url = '%s/watch/services' % self.kube_api
 
         for event in iter_events(url, interval=self.reconnect_interval):
@@ -73,32 +70,28 @@ class ServiceWatcher (Process):
                 LOG.debug('unknown event: %(type)s' % event)
                 continue
 
-            handler(service)
+            yield(handler(service))
 
     def handle_added(self, service):
-        self.q.put({'message': 'add-service',
-                    'target': service['id'],
-                    'service': service})
+        return({'message': 'add-service',
+                'target': service['id'],
+                'service': service})
 
     def handle_deleted(self, service):
-        self.q.put({'message': 'delete-service',
-                    'target': service['id'],
-                    'service': service})
+        return({'message': 'delete-service',
+                'target': service['id'],
+                'service': service})
 
     def handle_modified(self, service):
-        self.q.put({'message': 'update-service',
-                    'target': service['id'],
-                    'service': service})
+        return({'message': 'update-service',
+                'target': service['id'],
+                'service': service})
 
 if __name__ == '__main__':
-    from multiprocessing import Queue
     import pprint
 
     logging.basicConfig(level=logging.DEBUG)
-    q = Queue()
-    s = ServiceWatcher(q)
-    s.start()
+    s = ServiceWatcher()
 
-    while True:
-        msg = q.get()
+    for msg in s:
         pprint.pprint(msg)

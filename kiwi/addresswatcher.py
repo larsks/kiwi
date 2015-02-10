@@ -2,7 +2,6 @@ import logging
 import requests
 import time
 import re
-from multiprocessing import Process
 
 import defaults
 
@@ -33,24 +32,22 @@ def iter_events(url, interval=1, recursive=True):
             time.sleep(interval)
 
 
-class AddressWatcher (Process):
-    '''Watches an etcd directory of keys that represent public ip addresses
-    being managed by kiwi, and writes the resulting events to the message
-    queue.'''
+class AddressWatcher (object):
+    '''An AddressWatcher is an iterator that watches an etcd directory of
+    keys that represent public ip addresses being managed by kiwi, and
+    yields these events as Python dictionaries.'''
 
     def __init__(self,
-                 queue,
                  etcd_endpoint=defaults.etcd_endpoint,
                  etcd_prefix=defaults.etcd_prefix,
                  reconnect_interval=defaults.reconnect_interval):
         super(AddressWatcher, self).__init__()
 
-        self.q = queue
         self.etcd_endpoint = etcd_endpoint
         self.etcd_prefix = etcd_prefix
         self.reconnect_interval = reconnect_interval
 
-    def run(self):
+    def __iter__(self):
         url = '%s/v2/keys%s/publicips' % (self.etcd_endpoint,
                                           self.etcd_prefix)
 
@@ -73,43 +70,39 @@ class AddressWatcher (Process):
                 LOG.debug('unknown event: %(action)s' % event)
                 continue
 
-            handler(address, node)
+            yield(handler(address, node))
 
     def handle_create(self, address, node):
-        self.q.put({'message': 'create-address',
-                    'target': address,
-                    'address': address,
-                    'node': node})
+        return({'message': 'create-address',
+                'target': address,
+                'address': address,
+                'node': node})
 
     def handle_set(self, address, node):
-        self.q.put({'message': 'set-address',
-                    'target': address,
-                    'address': address,
-                    'node': node})
+        return({'message': 'set-address',
+                'target': address,
+                'address': address,
+                'node': node})
 
     def handle_delete(self, address, node):
-        self.q.put({'message': 'delete-address',
-                    'target': address,
-                    'address': address,
-                    'node': node})
+        return({'message': 'delete-address',
+                'target': address,
+                'address': address,
+                'node': node})
 
     handle_compareanddelete = handle_delete
 
     def handle_expire(self, address, node):
-        self.q.put({'message': 'expire-address',
-                    'target': address,
-                    'address': address,
-                    'node': node})
+        return({'message': 'expire-address',
+                'target': address,
+                'address': address,
+                'node': node})
 
 if __name__ == '__main__':
-    from multiprocessing import Queue
     import pprint
 
     logging.basicConfig(level=logging.DEBUG)
-    q = Queue()
-    s = AddressWatcher(q)
-    s.start()
+    s = AddressWatcher()
 
-    while True:
-        msg = q.get()
+    for msg in s:
         pprint.pprint(msg)

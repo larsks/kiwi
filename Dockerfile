@@ -9,6 +9,7 @@ RUN yum -y install \
 	iproute \
 	; yum clean all
 
+COPY .git/refs/heads/master /commit
 COPY . /src
 RUN cd /src; python setup.py install
 

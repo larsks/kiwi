@@ -5,11 +5,7 @@ import sys
 import argparse
 import logging
 
-from multiprocessing import Queue
-
 import manager
-import addresswatcher
-import servicewatcher
 import defaults
 import interface
 import firewall
@@ -88,9 +84,7 @@ def main():
         fw_driver = firewall.Firewall(fwchain=args.fwchain,
                                       fwmark=args.fwmark)
 
-    mqueue = Queue()
-    mgr = manager.Manager(mqueue,
-                          etcd_endpoint=args.etcd_endpoint,
+    mgr = manager.Manager(etcd_endpoint=args.etcd_endpoint,
                           kube_endpoint=args.kube_endpoint,
                           etcd_prefix=args.etcd_prefix,
                           iface_driver=iface_driver,
@@ -100,20 +94,7 @@ def main():
                           id=args.agent_id)
 
     LOG.info('My id is: %s', mgr.id)
-
-    workers = [addresswatcher.AddressWatcher(mqueue,
-                                             etcd_endpoint=args.etcd_endpoint,
-                                             etcd_prefix=args.etcd_prefix),
-               servicewatcher.ServiceWatcher(mqueue,
-                                             kube_endpoint=args.kube_endpoint)]
-
-    for worker in workers:
-        worker.start()
-
-    try:
-        mgr.run()
-    finally:
-        mgr.cleanup()
+    mgr.run()
 
 if __name__ == '__main__':
     main()

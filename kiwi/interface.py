@@ -47,24 +47,32 @@ class Interface (object):
             address = m.group('ipv4addr').split('/')[0]
             self.remove_address(address)
 
-    def add_address(self, address):
+    def add_address(self, address, lft=None):
         '''Add the given address to the managed interface.'''
         LOG.info('add address %s to device %s',
                  address,
                  self.interface)
-        try:
-            # Note that we're using the 'label' option here to apply a
-            # label to the address.  This allows us to identify addresses
-            # that we have added, which in turns allows us to clean them up
-            # at startup without needing to otherwise preserve state.
-            subprocess.check_call([
-                'ip', 'addr', 'add',
+
+        # Note that we're using the 'label' option here to apply a
+        # label to the address.  This allows us to identify addresses
+        # that we have added, which in turns allows us to clean them up
+        # at startup without needing to otherwise preserve state.
+        cmd = [ 'ip', 'addr', 'replace',
                 '%s/32' % address,
                 'label', '%s:%s' % (self.interface, self.label),
-                'dev', self.interface
-            ])
+                'dev', self.interface ]
+
+        if lft:
+            cmd += ['preferred_lft', str(lft),
+                    'valid_lft', str(lft)]
+
+        try:
+            subprocess.check_call(cmd)
         except subprocess.CalledProcessError as exc:
             raise InterfaceDriverError(reason=exc)
+
+    def refresh_address(self, address, lft=None):
+        self.add_address(address, lft=lft)
 
     def remove_address(self, address):
         '''Remove the given address from the managed interface.'''

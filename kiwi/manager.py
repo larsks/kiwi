@@ -140,16 +140,16 @@ class Manager (object):
                              params={'prevValue': self.id,
                                      'ttl': self.refresh_interval * 2},
                              data={'value': self.id})
-        except requests.ConnectionError as exc:
-            LOG.error('connection to %s failed: %s',
-                      self.url_for(address),
-                      exc)
-        else:
-            if not r.ok:
-                LOG.error('failed to refresh claim on %s: %s',
-                          address,
-                          r.reason)
-                self.release_address(address)
+            r.raise_for_status()
+
+            if self.iface_driver:
+                self.iface_driver.refresh_address(
+                    address,
+                    lft=self.refresh_interval*2)
+        except Exception as exc:
+            LOG.error('failed to refresh address %s: %s',
+                      address, exc)
+            self.release_address(address)
 
     def claim_address(self, address):
         assert address in self.addresses
@@ -178,7 +178,8 @@ class Manager (object):
 
             if self.iface_driver:
                 try:
-                    self.iface_driver.add_address(address)
+                    self.iface_driver.add_address(address,
+                                                  lft=self.refresh_interval*2)
                 except InterfaceDriverError as exc:
                     LOG.error('failed to configure address on system: %d',
                               exc.status.returncode)

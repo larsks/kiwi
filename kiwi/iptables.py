@@ -14,6 +14,14 @@ class CommandError(Exception):
         self.stdout = stdout
         self.stderr = stderr
 
+    def __repr__(self):
+        return '<CommandError [%d]: %s>' % (
+            self.returncode,
+            self.stderr.splitlines()[0])
+
+    def __str__(self):
+        return repr(self)
+
 
 def cmd(*args):
     '''This acts very much like subprocess.check_output, except that

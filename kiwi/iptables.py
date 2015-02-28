@@ -56,21 +56,21 @@ class Rule(tuple):
 
 
 class Chain(object):
-    def __init__(self, chain, table):
-        self.chain = chain
+    def __init__(self, name, table):
+        self.name = name
         self.table = table
         self.iptables = table.iptables
 
     def __str__(self):
         return '<Chain %s:%s>' % (
             self.table.table,
-            self.chain)
+            self.name)
 
     def __repr__(self):
         return str(self)
 
     def rules(self):
-        for rule in self.iptables('-S', self.chain).splitlines():
+        for rule in self.iptables('-S', self.name).splitlines():
             rule = Rule(rule)
             if rule[0] != '-A':
                 continue
@@ -79,7 +79,7 @@ class Chain(object):
 
     def rule_exists(self, rule):
         try:
-            self.iptables('-C', self.chain, *rule)
+            self.iptables('-C', self.name, *rule)
         except CommandError as err:
             if err.returncode != 1:
                 raise
@@ -93,7 +93,7 @@ class Chain(object):
         '''This is property that when read returns the current default
         policy for this chain and when assigned to changes the default
         policy.'''
-        for rule in self.iptables('-S', self.chain).splitlines():
+        for rule in self.iptables('-S', self.name).splitlines():
             rule = Rule(rule)
             if rule[0] == '-P':
                 return rule[2]
@@ -103,30 +103,30 @@ class Chain(object):
     @policy.setter
     def policy(self, value):
         '''Set the default policy for this chain.'''
-        self.iptables('-P', self.chain, value)
+        self.iptables('-P', self.name, value)
 
     def append(self, rule):
-        self.iptables('-A', self.chain, *rule)
+        self.iptables('-A', self.name, *rule)
 
     def insert(self, rule, pos=1):
-        self.iptables('-I', self.chain, str(pos), *rule)
+        self.iptables('-I', self.name, str(pos), *rule)
 
     def replace(self, pos, rule):
-        self.iptables('-R', self.chain, str(pos), *rule)
+        self.iptables('-R', self.name, str(pos), *rule)
 
     def zero(self):
-        self.iptables('-Z', self.chain)
+        self.iptables('-Z', self.name)
 
     def delete(self, rule=None, pos=None):
         if rule is not None:
-            self.iptables('-D', self.chain, *rule)
+            self.iptables('-D', self.name, *rule)
         elif pos is not None:
-            self.iptables('-D', self.chain, str(pos))
+            self.iptables('-D', self.name, str(pos))
         else:
             raise ValueError('requires either rule or position')
 
     def flush(self):
-        self.iptables('-F', self.chain)
+        self.iptables('-F', self.name)
 
 
 class ChainFinder(object):
@@ -136,26 +136,30 @@ class ChainFinder(object):
     def __getitem__(self, k):
         return self.table.get_chain(k)
 
+    def __iter__(self):
+        for k in self.keys():
+            yield self.table.get_chain(k)
+
     def keys(self):
         for chain in self.table.list_chains():
             yield chain
 
 
 class Table(object):
-    def __init__(self, table='filter', netns=None):
-        self.table = table
+    def __init__(self, name='filter', netns=None):
+        self.name = name
 
         prefix = ()
         if netns is not None:
             prefix = ('ip', 'netns', 'exec', netns)
 
         self.iptables = functools.partial(
-            cmd, *(prefix + ('iptables', '-w', '-t', table)))
+            cmd, *(prefix + ('iptables', '-w', '-t', name)))
 
         self.chains = ChainFinder(self)
 
     def __str__(self):
-        return '<Table %s>' % (self.table,)
+        return '<Table %s>' % (self.name,)
 
     def __repr__(self):
         return str(self)

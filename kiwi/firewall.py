@@ -2,6 +2,7 @@ import logging
 import subprocess
 
 import defaults
+import iptables
 from exc import *
 
 
@@ -29,24 +30,16 @@ class Firewall (object):
     def cleanup(self):
         self.flush_rules()
 
-    def chain_exists(self, chain, table='mangle'):
-        '''Return True if the given chain exists, False otherwise.'''
-        ret = subprocess.call([
-            'iptables', '-t', table, '-S', chain])
-
-        return ret == 0
-
     def create_chain(self):
         '''Create self.fwchain if it does not already exist.'''
 
-        if self.chain_exists(self.fwchain):
+        if iptables.mangle.chain_exists(self.fwchain):
             return
 
         LOG.info('creating chain %s', self.fwchain)
         try:
-            subprocess.check_call([
-                'iptables', '-t', 'mangle', '-N', self.fwchain])
-        except subprocess.CalledProcessError as exc:
+            iptables.mangle.create_chain(self.fwchain)
+        except iptables.CommandError as exc:
             raise FirewallDriverError(reason=exc)
 
     def flush_rules(self):
@@ -56,16 +49,15 @@ class Firewall (object):
                  self.fwchain)
         self.rules = set()
         try:
-            subprocess.check_call([
-                'iptables', '-t', 'mangle', '-F', self.fwchain])
-        except subprocess.CalledProcessError as exc:
+            iptables.mangle.flush_chain(self.fwchain)
+        except iptables.CommandError as exc:
             raise FirewallDriverError(reason=exc)
 
     def rule_for(self, address, service):
         '''Generate an iptables rule (returned as a tuple) for the given
         address and service.'''
 
-        return tuple(str(arg) for arg in [
+        return iptables.Rule(str(arg) for arg in [
             '-d', address,
             '-p', service['protocol'].lower(),
             '--dport', service['port'],
@@ -89,12 +81,11 @@ class Firewall (object):
                  service['id'], address, service['port'])
 
         try:
-            subprocess.check_call(('iptables', '-t', 'mangle',
-                                   '-A', self.fwchain) + rule)
-        except subprocess.CalledProcessError as exc:
+            iptables.mangle.chains[self.fwchain].append(rule)
+        except iptables.CommandError as exc:
             raise FirewallDriverError(reason=exc)
-
-        self.rules.add(rule)
+        else:
+            self.rules.add(rule)
 
     def remove_service(self, address, service):
         '''Remove a service from the firewall.'''
@@ -106,7 +97,6 @@ class Firewall (object):
                  service['id'], address, service['port'])
         self.rules.remove(rule)
         try:
-            subprocess.check_call(('iptables', '-t', 'mangle',
-                                   '-D', self.fwchain) + rule)
-        except subprocess.CalledProcessError as exc:
+            iptables.mangle.chains[self.fwchain].remove(rule=rule)
+        except iptables.CommandError as exc:
             raise FirewallDriverError(reason=exc)

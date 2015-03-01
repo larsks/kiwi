@@ -1,5 +1,5 @@
 class KiwiError (Exception):
-    def __init__(self, message, reason=None, returncode=None,
+    def __init__(self, message=None, reason=None, returncode=None,
                  stdout=None, stderr=None, *args, **kwargs):
         self.reason = reason
         self.stdout = stdout

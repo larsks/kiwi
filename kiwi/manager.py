@@ -182,7 +182,7 @@ class Manager (object):
                                                   lft=self.refresh_interval*2)
                 except InterfaceDriverError as exc:
                     LOG.error('failed to configure address on system: %d',
-                              exc.status.returncode)
+                              exc.returncode)
 
     def release_address(self, address):
         if not self.address_is_claimed(address):
@@ -212,7 +212,7 @@ class Manager (object):
                 self.iface_driver.remove_address(address)
             except InterfaceDriverError as exc:
                 LOG.error('failed to remove address on system: %d',
-                          exc.status.returncode)
+                          exc.returncode)
 
     def remove_address(self, address):
         assert address in self.addresses

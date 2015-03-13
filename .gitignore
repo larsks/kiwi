@@ -1,2 +1,5 @@
 *.py[co]
 .*.sw?
+build/
+dist/
+kiwi.egg-info/

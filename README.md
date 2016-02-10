@@ -1,3 +1,8 @@
+![Deprecated!](deprecated.png)
+
+THIS CODE WAS WRITTEN FOR AN EARLIER VERSION OF KUBERNETES AND WILL
+NOT FUNCTION WITH CURRENT RELEASES.
+
 # Kiwi, the Kubernetes IP Manager
 
 This is a simple service for managing the assignment of IP addresses
